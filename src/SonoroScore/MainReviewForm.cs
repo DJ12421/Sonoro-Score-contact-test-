@@ -101,7 +101,7 @@ public partial class MainReviewForm : Form
                     }
                     else
                     {
-                        LoadFolderSession(sessions[0]);
+                        await LoadFolderSessionAsync(sessions[0]);
                     }
                 }
             }
@@ -157,7 +157,7 @@ public partial class MainReviewForm : Form
             Renderer = new DarkToolStripRenderer()
         };
 
-        var openFolderBtn = new ToolStripButton("📁 Open Folder", null, (s, e) => OpenFolderDialog()) { ForeColor = FgPrimary };
+        var openFolderBtn = new ToolStripButton("📁 Open Folder", null, async (s, e) => await OpenFolderDialogAsync()) { ForeColor = FgPrimary };
         var openJsonBtn   = new ToolStripButton("📄 Load Scan JSON", null, async (s, e) => await OpenJsonDialogAsync()) { ForeColor = FgPrimary };
         var saveJsonBtn   = new ToolStripButton("💾 Save Verified JSON", null, async (s, e) => await SaveVerifiedJsonAsync()) { ForeColor = AccentGreen, Font = new Font(Font, FontStyle.Bold) };
         var rescanBtn     = new ToolStripButton("⚡ Re-Scan Current", null, async (s, e) => await RescanCurrentAsync()) { ForeColor = AccentAmber };
@@ -523,12 +523,12 @@ public partial class MainReviewForm : Form
 
     // ── Session & File Loading ────────────────────────────────────────────────
 
-    private void OpenFolderDialog()
+    private async Task OpenFolderDialogAsync()
     {
         using var fbd = new FolderBrowserDialog();
         if (fbd.ShowDialog() == DialogResult.OK)
         {
-            LoadFolderSession(fbd.SelectedPath);
+            await LoadFolderSessionAsync(fbd.SelectedPath);
         }
     }
 
@@ -539,6 +539,22 @@ public partial class MainReviewForm : Form
         {
             await LoadJsonSessionAsync(ofd.FileName);
         }
+    }
+
+    /// <summary>
+    /// Scan-result files produced by the CLI / debugger (NOT verified_echoes_*.json,
+    /// which uses the review-studio schema and cannot be re-loaded as a scan session).
+    /// </summary>
+    private static readonly string[] ScanJsonPatterns = ["test_scan_results_*.json", "scan_results_*.json"];
+
+    private static string? FindLatestScanJson(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            return null;
+        return ScanJsonPatterns
+            .SelectMany(p => Directory.GetFiles(folderPath, p))
+            .OrderByDescending(f => f)
+            .FirstOrDefault();
     }
 
     private async Task LoadJsonSessionAsync(string jsonPath)
@@ -555,15 +571,56 @@ public partial class MainReviewForm : Form
                 return;
             }
 
-            _currentSessionPath = session.SessionPath;
-            _allItems.Clear();
-            foreach (var r in session.Results)
+            // ── Resolve the image folder behind this scan ("spawn its images") ──
+            // Prefer the recorded session path, then the JSON's own folder.
+            string? imageFolder = null;
+            if (!string.IsNullOrWhiteSpace(session.SessionPath) && Directory.Exists(session.SessionPath))
+                imageFolder = session.SessionPath;
+            string? jsonFolder = Path.GetDirectoryName(jsonPath);
+            if (imageFolder == null && !string.IsNullOrEmpty(jsonFolder) && Directory.Exists(jsonFolder))
+                imageFolder = jsonFolder;
+
+            int missing = session.Results.Count(r => !File.Exists(r.ImagePath));
+            if (missing > 0)
             {
-                _allItems.Add(EchoReviewItem.FromScanResult(r));
+                // Stored absolute paths are stale (folder moved?) — ask for the folder once,
+                // then relink every result by file name.
+                var ask = MessageBox.Show(
+                    $"{missing}/{session.Results.Count} scan images not found at their recorded paths.\n\n" +
+                    "Locate the image folder for this scan so results stay paired with their screenshots?",
+                    "Images Missing", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ask == DialogResult.Yes)
+                {
+                    using var fbd = new FolderBrowserDialog { SelectedPath = imageFolder ?? jsonFolder ?? "" };
+                    if (fbd.ShowDialog() == DialogResult.OK)
+                        imageFolder = fbd.SelectedPath;
+                }
             }
 
-            _sessionInfoLabel.Text = $"{Path.GetFileName(_currentSessionPath)} | {_allItems.Count} Echoes";
-            _statusLabel.Text = $"Loaded {_allItems.Count} echoes from JSON. Ready for review.";
+            _currentSessionPath = imageFolder ?? session.SessionPath;
+            _allItems.Clear();
+            int relinked = 0, stillMissing = 0;
+            foreach (var r in session.Results)
+            {
+                var record = r;
+                if (!File.Exists(record.ImagePath) && imageFolder != null)
+                {
+                    string candidate = Path.Combine(imageFolder, Path.GetFileName(record.ImagePath));
+                    if (File.Exists(candidate))
+                    {
+                        record = record with { ImagePath = candidate };
+                        relinked++;
+                    }
+                    else stillMissing++;
+                }
+                else if (!File.Exists(record.ImagePath)) stillMissing++;
+                _allItems.Add(EchoReviewItem.FromScanResult(record));
+            }
+
+            _sessionInfoLabel.Text = $"{Path.GetFileName(_currentSessionPath)} | {_allItems.Count} Echoes ({Path.GetFileName(jsonPath)})";
+            _statusLabel.Text = $"Loaded {_allItems.Count} echoes from {Path.GetFileName(jsonPath)}" +
+                                (relinked > 0 ? $" ({relinked} images relinked)" : "") +
+                                (stillMissing > 0 ? $" — {stillMissing} images still missing" : "") + ".";
             ApplyFilter();
         }
         catch (Exception ex)
@@ -572,8 +629,17 @@ public partial class MainReviewForm : Form
         }
     }
 
-    private void LoadFolderSession(string folderPath)
+    private async Task LoadFolderSessionAsync(string folderPath)
     {
+        // Opening a folder loads the images AND the latest scan with them —
+        // results stay paired with their screenshots instead of PENDING_SCAN stubs.
+        string? scanJson = FindLatestScanJson(folderPath);
+        if (scanJson != null)
+        {
+            await LoadJsonSessionAsync(scanJson);
+            return;
+        }
+
         _currentSessionPath = folderPath;
         var pngs = Directory.GetFiles(folderPath, "echo_*.png").OrderBy(f => f).ToArray();
         if (pngs.Length == 0)
@@ -593,7 +659,7 @@ public partial class MainReviewForm : Form
             });
         }
 
-        _sessionInfoLabel.Text = $"{Path.GetFileName(folderPath)} | {_allItems.Count} Images (Pending Scan)";
+        _sessionInfoLabel.Text = $"{Path.GetFileName(folderPath)} | {_allItems.Count} Images (Pending Scan — no scan JSON found)";
         ApplyFilter();
     }
 
