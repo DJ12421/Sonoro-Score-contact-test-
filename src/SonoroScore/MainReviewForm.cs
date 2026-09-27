@@ -130,16 +130,9 @@ public partial class MainReviewForm : Form
             _subKeyCombos[i].Items.AddRange(statDisplays);
         }
 
-        // Sonatas
-        string[] sonatas =
-        [
-            "Freezing Frost", "Molten Rift", "Void Thunder", "Sierra Gale",
-            "Celestial Light", "Sunsinken Eclipse", "Rejuvenating Glow",
-            "Moonlit Clouds", "Lingering Tunes", "Frosty Resolve",
-            "Eternal Radiance", "Midnight Veil", "Empyrean Anthem", "Luminary Radiance"
-        ];
+        // Sonatas (all 34 official sonatas from GameDatabase)
         _sonataCombo.Items.Clear();
-        _sonataCombo.Items.AddRange(sonatas);
+        _sonataCombo.Items.AddRange(GameDatabase.KnownSonatas);
     }
 
     private void InitializeComponents()

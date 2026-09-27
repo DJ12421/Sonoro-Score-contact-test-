@@ -18,6 +18,10 @@ public static class EchoRegions
     public const float PanelH = 0.7792f;
 
     // Panel-relative regions (x, y, w, h all in [0,1] relative to panel crop)
+    // Calibrated via probe on 1920x1080 capture → panel 361x841px
+    //   Echo Skill header  → y ≈ 0.43  (364px)
+    //   Sonata Effect hdr  → y ≈ 0.67  (560px)
+    //   Equipped by text   → y ≈ 0.97+ (>816px)
     public static readonly RectangleF EchoName        = new(0f,        0f,      0.770f,  0.061f);
     public static readonly RectangleF Level           = new(0.776f,    0.018f,  0.119f,  0.037f);
     public static readonly RectangleF Cost            = new(0.018f,    0.065f,  0.241f,  0.031f);
@@ -25,15 +29,24 @@ public static class EchoRegions
     // Unified Main Stat strip (captures both label and value in one line, e.g. "Crit. Rate 22.0%")
     public static readonly RectangleF MainStatStrip   = new(0.080f,    0.110f,  0.900f,  0.055f);
     
-    // Substats 2-column crops (avoids OCR reading across columns out of order)
-    public static readonly RectangleF SubstatsLabels  = new(0.080f,    0.200f,  0.650f,  0.280f);
-    public static readonly RectangleF SubstatsValues  = new(0.730f,    0.200f,  0.250f,  0.280f);
+    // Substats 2-column crops — trimmed to y=0.20..0.42 to stop before "Echo Skill" header
+    public static readonly RectangleF SubstatsLabels  = new(0.080f,    0.200f,  0.650f,  0.220f);
+    public static readonly RectangleF SubstatsValues  = new(0.730f,    0.200f,  0.250f,  0.220f);
 
-    // Fallback single block
-    public static readonly RectangleF SubstatsBlock   = new(0.080f,    0.200f,  0.900f,  0.280f);
+    // Substats unified block (width covers labels and values without splitting columns)
+    public static readonly RectangleF SubstatsBlock   = new(0.040f,    0.195f,  0.920f,  0.225f);
 
     // Rarity band (used for hue-based pixel classification)
     public static readonly RectangleF RarityBand      = new(0.003f,    0.016f,  0.320f,  0.042f);
+
+    // ── Zone B: Echo Skill + Sonata Effect ──────────────────────────────────
+    // Starts right after SubstatsBlock (y=0.44) down to y=0.94.
+    // Handles both 1-line and multi-line Echo Skill descriptions across Cost 1/3/4 echoes.
+    public static readonly RectangleF SonataZone      = new(0.000f,    0.440f,  1.000f,  0.500f);
+
+    // ── Zone C: Owner strip ─────────────────────────────────────────────────
+    // "Equipped by [Character]" footer text
+    public static readonly RectangleF OwnerZone       = new(0.000f,    0.940f,  1.000f,  0.060f);
 
     /// <summary>
     /// Convert a panel-relative RectangleF to absolute pixel coordinates

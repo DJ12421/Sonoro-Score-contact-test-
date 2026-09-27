@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 
@@ -60,9 +61,12 @@ public class EchoRecognizer
             // ── 2. OCR individual regions ───────────────────────────────────
             string nameOcr       = await OcrRegionAsync(panel, EchoRegions.EchoName,       upscale: true);
             string levelOcr      = await OcrRegionAsync(panel, EchoRegions.Level,          upscale: true);
+            string costOcr       = await OcrRegionAsync(panel, EchoRegions.Cost,           upscale: true);
             string mainStatLine  = await OcrRegionAsync(panel, EchoRegions.MainStatStrip,  upscale: true);
-            string substatLabels = await OcrRegionAsync(panel, EchoRegions.SubstatsLabels, upscale: true);
-            string substatValues = await OcrRegionAsync(panel, EchoRegions.SubstatsValues, upscale: true);
+            // Zone B: Sonata Effect region (starts below skill text)
+            string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone,     upscale: true);
+            // Zone C: Owner strip
+            string ownerZoneOcr  = await OcrRegionAsync(panel, EchoRegions.OwnerZone,      upscale: true);
 
             _log?.Invoke($"    Name OCR: \"{nameOcr.Replace('\n',' ')}\"");
 
@@ -96,7 +100,7 @@ public class EchoRecognizer
             if (level == null) warnings.Add($"Level not parsed from: \"{levelOcr}\"");
 
             // ── 6. Cost (from catalog or parse) ────────────────────────────
-            int? cost = nameEntry?.Cost ?? ParseCost(substatLabels);
+            int? cost = nameEntry?.Cost ?? ParseCost(costOcr);
 
             // ── 7. Main stat ────────────────────────────────────────────────
             var mainStat = StatParser.ParseLine(mainStatLine);
@@ -113,26 +117,150 @@ public class EchoRecognizer
             if (mainStat == null)
                 errors.Add($"Main stat not parsed from: \"{mainStatLine.Replace('\n', ' ')}\"");
 
-            // ── 8. Substats (2-column paired parse) ─────────────────────────
-            var lblLines = substatLabels.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            var valLines = substatValues.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            var rawSubstats = StatParser.ParseColumns(lblLines, valLines);
+            // ── 8. Substats (Unified Block with Y-Clustering & Pixel Fallback) ──
+            using var substatsBmp = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
+            using var substatsUp  = ImagePreprocessor.Upscale2x(ImagePreprocessor.EnhanceForOcr(substatsBmp));
+            var ocrLines = await WinOcr.RecognizeLinesWithBoundsAsync(substatsUp);
 
-            // Remove main stat if it appeared in the substats
-            if (mainStat != null)
-                rawSubstats.RemoveAll(s => s.Key == mainStat.Key);
+            double slotHeight = substatsUp.Height / 5.0;
+            var slotLabels = new string?[5];
+            var slotValues = new float?[5];
+            var slotPercents = new bool[5];
+            var slotValStrs = new string?[5];
 
-            var substats = rawSubstats
-                .Take(5)
-                .Select(s =>
+            foreach (var line in ocrLines)
+            {
+                int slot = (int)Math.Clamp(Math.Floor(line.Y / slotHeight), 0, 4);
+                string text = line.Text.Trim();
+                string normalized = StatParser.NormalizeOcrArtifacts(text);
+
+                // If line is a value (e.g. "8.4%", "150", "10.1%")
+                var valMatch = Regex.Match(normalized, @"^[-+]?\s*(\d+(?:[.,]\d+)?)\s*(%)?$");
+                if (valMatch.Success)
                 {
-                    var (snapped, conf) = TunableRolls.Resolve(s.Key, s.Value);
-                    return new SubstatResult(s.Key.ToString(), s.Value, snapped, conf, s.RawValue);
-                })
-                .ToList();
+                    if (float.TryParse(valMatch.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out float val))
+                    {
+                        slotValues[slot] = val;
+                        slotPercents[slot] = valMatch.Groups[2].Success || normalized.Contains('%');
+                        slotValStrs[slot] = normalized;
+                    }
+                }
+                else
+                {
+                    // Filter out UI headers like "Echo Skill"
+                    if (!Regex.IsMatch(normalized, @"echo\s*skill", RegexOptions.IgnoreCase))
+                        slotLabels[slot] = text;
+                }
+            }
 
-            if (substats.Count < 4)
-                warnings.Add($"Only {substats.Count} substats parsed (expected 4–5).");
+            var substats = new List<SubstatResult>();
+            for (int s = 0; s < 5; s++)
+            {
+                if (slotValues[s] == null) continue; // slot is empty (unleveled echo)
+                float numVal = slotValues[s]!.Value;
+                bool isPercent = slotPercents[s];
+                string? lbl = slotLabels[s];
+
+                StatKey? key = null;
+                float conf = 0.88f;
+
+                if (!string.IsNullOrWhiteSpace(lbl))
+                {
+                    string combined = isPercent ? $"{lbl} {numVal}%" : $"{lbl} {numVal}";
+                    var parsed = StatParser.ParseLine(combined);
+                    if (parsed != null) key = parsed.Key;
+                }
+
+                // Pixel fallback: OCR commonly misses short 2-letter "HP" labels without context
+                if (key == null)
+                {
+                    if (StatPixelMatcher.DetectHp(substatsBmp, s, 5))
+                    {
+                        key = isPercent ? StatKey.HpPercent : StatKey.Hp;
+                        lbl = isPercent ? "HP %" : "HP";
+                        conf = 0.90f;
+                    }
+                }
+
+                if (key != null)
+                {
+                    // Prevent main stat duplication in substats
+                    if (mainStat != null && key == mainStat.Key) continue;
+
+                    var (snapped, snapConf) = TunableRolls.Resolve(key.Value, numVal);
+                    var sub = new SubstatResult(key.Value.ToString(), numVal, snapped, Math.Min(conf, snapConf), $"{lbl} {numVal}{(isPercent ? "%" : "")}");
+                    substats.Add(sub);
+                }
+            }
+
+            string rawSubstatsOcr = string.Join("\n", ocrLines.Select(l => $"[y={l.Y:F0}, x={l.X:F0}] {l.Text}"));
+
+
+            // ── 9. Sonata detection (Zone B OCR) ────────────────────────────
+            // OCR the sonata zone. Find the "Sonata Effect" header line.
+            // The very next non-empty line is the sonata set name (e.g. "Trailblazing Star @ (2/2)").
+            // Strip the " @ (N/N)" icon artifact → get the set name text.
+            string? sonataName    = null;
+            float   sonataConf    = 0f;
+            string  rawSonataOcr  = sonataZoneOcr.Trim();
+
+            var sonataLines = sonataZoneOcr
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToArray();
+
+            int sonataHdrIdx = Array.FindIndex(sonataLines,
+                l => l.Contains("Sonata", StringComparison.OrdinalIgnoreCase) &&
+                     l.Contains("Effect", StringComparison.OrdinalIgnoreCase));
+
+            if (sonataHdrIdx >= 0 && sonataHdrIdx + 1 < sonataLines.Length)
+            {
+                // Take the line immediately after "Sonata Effect"
+                string rawSonataCand = sonataLines[sonataHdrIdx + 1];
+                // Strip OCR icon artifact patterns like "@ (2/2)", "@ (5/5)", "(2/2)" etc.
+                string cleanedSonata = Regex.Replace(rawSonataCand, @"[@\(].*$", "").Trim();
+                cleanedSonata = Regex.Replace(cleanedSonata, @"\s+", " ").Trim();
+
+                if (!string.IsNullOrEmpty(cleanedSonata))
+                {
+                    // Fuzzy match against known sonata names
+                    var (matched, score) = FuzzyMatcher.ClosestMatch(
+                        cleanedSonata, GameDatabase.KnownSonatas, s => s, threshold: 0.55f);
+
+                    if (matched != null)
+                    {
+                        sonataName = matched;
+                        sonataConf = score;
+                    }
+                    else
+                    {
+                        // Keep raw cleaned text as best guess with low confidence
+                        sonataName = cleanedSonata;
+                        sonataConf = 0.30f;
+                        warnings.Add($"Sonata fuzzy match failed for: \"{cleanedSonata}\"");
+                    }
+                }
+            }
+            else if (sonataHdrIdx < 0)
+            {
+                // "Sonata Effect" header not found — try catalog fallback
+                if (nameEntry?.Sonatas.Length > 0)
+                {
+                    sonataName = nameEntry.Sonatas[0];
+                    sonataConf = 0.50f; // low confidence, catalog-inferred
+                    warnings.Add("Sonata Effect header not found; using catalog default.");
+                }
+                else
+                {
+                    warnings.Add("Sonata Effect not detected.");
+                }
+            }
+
+            // ── 10. Owner / Equipped By (Zone C OCR) ───────────────────────
+            string? equippedBy = null;
+            var ownerMatch = Regex.Match(ownerZoneOcr,
+                @"Equipped\s+by\s+(.+)", RegexOptions.IgnoreCase);
+            if (ownerMatch.Success)
+                equippedBy = ownerMatch.Groups[1].Value.Trim();
 
             panel.Dispose();
 
@@ -145,14 +273,16 @@ public class EchoRecognizer
                 Cost        = new FieldResult(cost.HasValue ? (object?)cost.Value : null, nameEntry != null ? 0.95f : 0.5f),
                 Rarity      = new FieldResult(rarity > 0 ? (object?)rarity : null, rarity > 0 ? 0.88f : 0f),
                 Level       = new FieldResult(level.HasValue ? (object?)level.Value : null, level.HasValue ? 0.90f : 0f, levelOcr.Trim()),
-                Sonata      = new FieldResult(nameEntry?.Sonatas.Length > 0 ? nameEntry.Sonatas[0] : null, nameEntry?.Sonatas.Length > 0 ? 0.80f : 0f),
+                Sonata      = new FieldResult(sonataName, sonataConf, rawSonataOcr),
+                EquippedBy  = new FieldResult(equippedBy, equippedBy != null ? 0.90f : 0f, ownerZoneOcr.Trim()),
                 MainStatKey   = new FieldResult(mainStat?.Key.ToString(), mainStat != null ? 0.90f : 0f, mainStat?.RawLabel),
                 MainStatValue = new FieldResult(mainStat != null ? (object?)mainStat.Value : null, mainStat != null ? 0.88f : 0f, mainStat?.RawValue),
                 Substats    = substats,
                 RawNameOcr       = nameOcr.Trim(),
                 RawMainStatOcr   = mainStatLine.Trim(),
-                RawSubstatsOcr   = $"Labels: {string.Join(" | ", lblLines)}\nValues: {string.Join(" | ", valLines)}",
+                RawSubstatsOcr   = rawSubstatsOcr,
                 RawLevelOcr      = levelOcr.Trim(),
+                RawSonataOcr     = rawSonataOcr,
                 Errors   = errors,
                 Warnings = warnings,
             };
@@ -163,6 +293,7 @@ public class EchoRecognizer
             return Error(imagePath, $"Unexpected error: {ex.Message}");
         }
     }
+
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 

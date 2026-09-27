@@ -52,8 +52,8 @@ public static class StatParser
     public static string NormalizeOcrArtifacts(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return "";
-        // Clean leading non-letters like "( ATK" -> "ATK"
-        string s = Regex.Replace(text, @"^[\(\[\{<\|\s]+", "");
+        // Clean leading non-letters like "+ ATK", "( ATK", "✦ HP" -> "ATK", "HP"
+        string s = Regex.Replace(text, @"^[\(\[\{<\|+*~✦\-•\s]+", "");
         // Normalize OCR percentage artifacts: "30.00/0" -> "30.0%", "10.90/0" -> "10.9%", "69/0" -> "6.9%"
         s = Regex.Replace(s, @"(\d+)\s*(?:0/0|/0|o/o|O/O)", "$1%");
         return s.Trim();

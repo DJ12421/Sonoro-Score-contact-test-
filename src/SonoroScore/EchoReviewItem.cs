@@ -78,6 +78,7 @@ public class EchoReviewItem
     public int Rarity { get; set; } = 5;
     public int Level { get; set; } = 25;
     public string Sonata { get; set; } = "";
+    public string EquippedBy { get; set; } = "";
     public string MainStatKey { get; set; } = "";
     public float MainStatValue { get; set; }
 
@@ -167,6 +168,7 @@ public class EchoReviewItem
         int rarity = ExtractInt(scan.Rarity?.Value, 5);
         int level = ExtractInt(scan.Level?.Value, 25);
         string sonata = ExtractString(scan.Sonata?.Value, "");
+        string equipped = ExtractString(scan.EquippedBy?.Value, "");
         string mainKey = ExtractString(scan.MainStatKey?.Value, "");
         float mainVal = ExtractFloat(scan.MainStatValue?.Value, 0f);
 
@@ -178,6 +180,7 @@ public class EchoReviewItem
             Rarity          = rarity,
             Level           = level,
             Sonata          = sonata,
+            EquippedBy      = equipped,
             MainStatKey     = mainKey,
             MainStatValue   = mainVal,
             NameConfidence  = scan.EchoName?.Confidence ?? 0f,

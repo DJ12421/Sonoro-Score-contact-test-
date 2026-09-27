@@ -37,6 +37,7 @@ public record EchoScanResult
     public FieldResult?  Rarity       { get; init; }
     public FieldResult?  Level        { get; init; }
     public FieldResult?  Sonata       { get; init; }
+    public FieldResult?  EquippedBy   { get; init; }
     public FieldResult?  MainStatKey  { get; init; }
     public FieldResult?  MainStatValue{ get; init; }
     public List<SubstatResult> Substats { get; init; } = [];
@@ -46,6 +47,7 @@ public record EchoScanResult
     public string? RawMainStatOcr      { get; init; }
     public string? RawSubstatsOcr      { get; init; }
     public string? RawLevelOcr         { get; init; }
+    public string? RawSonataOcr        { get; init; }
 
     // ── Errors / warnings ─────────────────────────────────────────────────
     public List<string> Errors         { get; init; } = [];
@@ -54,6 +56,7 @@ public record EchoScanResult
     [JsonIgnore]
     public bool IsComplete => EchoName?.Value != null && MainStatKey?.Value != null && Substats.Count >= 4;
 }
+
 
 /// <summary>
 /// Aggregated summary across all images in a test session.

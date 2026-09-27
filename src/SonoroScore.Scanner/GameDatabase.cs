@@ -32,31 +32,47 @@ public static class GameDatabase
     private static EchoCatalogEntry[]? _catalog;
 
     // Sonata groups mapped to their set name.
-    // Group IDs from Nanoka: 10=Freezing Frost,11=Molten Rift,12=Void Thunder,
-    // 13=Sierra Gale,14=Celestial Light,15=Sunsinken Eclipse,16=Rejuvenating Glow,
-    // 17=Moonlit Clouds,18=Lingering Tunes,19=Frosty Resolve,20=Eternal Radiance,
-    // 21=Midnight Veil,22=Empyrean Anthem,23=Luminary Radiance,
-    // 33=Havoc,34=Spectro,35=multi
-    private static readonly Dictionary<int, string> SonataGroupMap = new()
+    // Official Sonata Group ID mappings from Nanoka API (synchronized with Tacet-Lab sonatas.generated.ts)
+    public static readonly Dictionary<int, string> SonataGroupMap = new()
     {
-        [10] = "Freezing Frost",
-        [11] = "Molten Rift",
-        [12] = "Void Thunder",
-        [13] = "Sierra Gale",
-        [14] = "Celestial Light",
-        [15] = "Sunsinken Eclipse",
-        [16] = "Rejuvenating Glow",
-        [17] = "Moonlit Clouds",
-        [18] = "Lingering Tunes",
-        [19] = "Frosty Resolve",
-        [20] = "Eternal Radiance",
-        [21] = "Midnight Veil",
-        [22] = "Empyrean Anthem",
-        [23] = "Luminary Radiance",
-        [33] = "Havoc Sonata",
-        [34] = "Spectro Sonata",
-        [35] = "Mixed Sonata",
+        [1]  = "Freezing Frost",
+        [2]  = "Molten Rift",
+        [3]  = "Void Thunder",
+        [4]  = "Sierra Gale",
+        [5]  = "Celestial Light",
+        [6]  = "Havoc Eclipse",
+        [7]  = "Rejuvenating Glow",
+        [8]  = "Moonlit Clouds",
+        [9]  = "Lingering Tunes",
+        [10] = "Frosty Resolve",
+        [11] = "Eternal Radiance",
+        [12] = "Midnight Veil",
+        [13] = "Empyrean Anthem",
+        [14] = "Tidebreaking Courage",
+        [16] = "Gusts of Welkin",
+        [17] = "Windward Pilgrimage",
+        [18] = "Flaming Clawprint",
+        [19] = "Dream of the Lost",
+        [20] = "Crown of Valor",
+        [21] = "Law of Harmony",
+        [22] = "Flamewing's Shadow",
+        [23] = "Thread of Severed Fate",
+        [24] = "Pact of Neonlight Leap",
+        [25] = "Halo of Starry Radiance",
+        [26] = "Rite of Gilded Revelation",
+        [27] = "Trailblazing Star",
+        [28] = "Chromatic Foam",
+        [29] = "Sound of True Name",
+        [30] = "Wishes of Quiet Snowfall",
+        [31] = "Reel of Spliced Memories",
+        [32] = "Shadow of Shattered Dreams",
+        [33] = "Song of Feathered Trace",
+        [34] = "Heart of Evil's Purge",
+        [35] = "Lamp of Nether Road",
     };
+
+    public static readonly string[] KnownSonatas = SonataGroupMap.Values.Distinct().ToArray();
+
 
     public static async Task<EchoCatalogEntry[]> LoadAsync(
         string? localCatalogPath = null,
