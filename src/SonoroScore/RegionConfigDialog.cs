@@ -142,14 +142,75 @@ public sealed class RegionConfigDialog : Form
         base.OnLoad(e);
         // Splitter distances must be applied after layout exists: setting them
         // while the containers still have default size freezes a squeezed panel.
-        // Left list 180px, right editor 250px, center takes the rest.
+        // Left list 180px, right editor 250px, center takes the rest —
+        // unless a saved layout from the previous session exists.
         try
         {
-            _split.SplitterDistance = Math.Min(180, _split.Width - _split.Panel2MinSize - _split.SplitterWidth);
-            int rightW = Math.Min(250, _content.Width - _content.Panel1MinSize - _content.SplitterWidth);
-            _content.SplitterDistance = _content.Width - rightW - _content.SplitterWidth;
+            if (!TryRestoreLayout())
+            {
+                _split.SplitterDistance = Math.Min(180, _split.Width - _split.Panel2MinSize - _split.SplitterWidth);
+                int rightW = Math.Min(250, _content.Width - _content.Panel1MinSize - _content.SplitterWidth);
+                _content.SplitterDistance = _content.Width - rightW - _content.SplitterWidth;
+            }
         }
         catch { /* keep designer defaults */ }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        SaveLayout();
+        base.OnFormClosing(e);
+    }
+
+    // ── Layout persistence (remembers previous size + sections) ─────────────
+
+    private static string LayoutPath
+        => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "area_dialog_layout.json");
+
+    private bool TryRestoreLayout()
+    {
+        string path = LayoutPath;
+        if (!File.Exists(path)) return false;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+            int w = root.GetProperty("width").GetInt32();
+            int h = root.GetProperty("height").GetInt32();
+            int splitMain = root.GetProperty("splitMain").GetInt32();
+            int splitContent = root.GetProperty("splitContent").GetInt32();
+
+            var area = Screen.FromControl(this).WorkingArea;
+            w = Math.Clamp(w, MinimumSize.Width, Math.Max(MinimumSize.Width, area.Width));
+            h = Math.Clamp(h, MinimumSize.Height, Math.Max(MinimumSize.Height, area.Height));
+            Size = new Size(w, h);
+            // Layout with the restored size before placing splitters.
+            PerformLayout();
+            _split.SplitterDistance = Math.Clamp(splitMain, _split.Panel1MinSize,
+                Math.Max(_split.Panel1MinSize, _split.Width - 100));
+            _content.SplitterDistance = Math.Clamp(splitContent, _content.Panel1MinSize,
+                Math.Max(_content.Panel1MinSize, _content.Width - _content.Panel2MinSize));
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private void SaveLayout()
+    {
+        try
+        {
+            var payload = new
+            {
+                width = Width,
+                height = Height,
+                splitMain = _split.SplitterDistance,
+                splitContent = _content.SplitterDistance
+            };
+            File.WriteAllText(LayoutPath,
+                System.Text.Json.JsonSerializer.Serialize(payload,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch { /* layout save is best-effort */ }
     }
 
     private void BuildEditor(Panel editor)
