@@ -127,12 +127,23 @@ This must be **converted to a C# resource** (JSON file or embedded array).
 - [x] **Attribution file** – `NOTICES.md` credits `https://github.com/DJ12421/Tacet-Lab`
   (GPL-3.0; corrected from MIT) + adapted portions list.
 
-- [ ] **Re-run test suite** after wiring (BLOCKED: no .NET SDK on PATH at time of writing):
+- [x] **Re-run test suite** after wiring — DONE 2026-09-28 (v1.5.1, WinOcr-fallback mode):
   ```powershell
-  dotnet run --project src/SonoroScore.Scanner.Cli -- --dir publish\AlephalSonata\aleph_images\session_20260927_204453 --export-tacet-auto --export-good-auto
+  dotnet run --project src/SonoroScore.Scanner.Cli -c Release -- --dir publish\AlephalSonata\aleph_images\session_20260927_204453 --export-tacet-auto --export-good-auto
   ```
-  Target: sonata field reads from icon match (warnings `Sonata from icon match…`, conf > 0.70);
-  record icon-vs-OCR counts from the new summary lines.
+  Full corpus (300 images, 58s, 194ms/image):
+  names 293/300 (97.7%), main stats 284/300 (94.7%),
+  sonata 300/300 (100.0%, **all via icon match**, 0 via OCR fallback — P2 target met),
+  complete 37/300 (12.3%), avg substats 1.62/echo.
+  Exports: `tacet-lab-backup_*.json` + `sonoro-good_*.json` (284 echoes, 16 skipped w/o main stat).
+  Note: late pages (p20) show 0 substats — consistent with unleveled echoes (locked
+  substat rows); `IsComplete` (≥4 substats) can never hit on those, so the 12.3%
+  completeness rate is a metric artifact, not a pipeline failure. Substat recall on
+  leveled echoes is the next calibration lever (Y-clustering + `StatPixelMatcher`).
+  ⚠️ Env issue: Tesseract native lib fails `fopen` on `tessdata/eng.traineddata`
+  in this environment (tried tessdata_best 15MB + tessdata_fast 4MB, file valid,
+  readable, native x64 DLLs deployed) → suite ran WinOcr-only. Tesseract-primary
+  path still needs validation on a machine where the data file loads.
 
 ---
 
