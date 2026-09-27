@@ -140,10 +140,14 @@ This must be **converted to a C# resource** (JSON file or embedded array).
   substat rows); `IsComplete` (≥4 substats) can never hit on those, so the 12.3%
   completeness rate is a metric artifact, not a pipeline failure. Substat recall on
   leveled echoes is the next calibration lever (Y-clustering + `StatPixelMatcher`).
-  ⚠️ Env issue: Tesseract native lib fails `fopen` on `tessdata/eng.traineddata`
-  in this environment (tried tessdata_best 15MB + tessdata_fast 4MB, file valid,
-  readable, native x64 DLLs deployed) → suite ran WinOcr-only. Tesseract-primary
-  path still needs validation on a machine where the data file loads.
+  ⚠️ Env issue RESOLVED 2026-09-28: Tesseract was never broken — `eng.traineddata`
+  had been copied to `bin/x64/Release/...` (solution-build layout) while
+  `dotnet run` executes from `bin/Release/...` (no `x64`). The `--diag-tess`
+  CLI flag now proves engine init per output dir. First live Tesseract-primary
+  run: 2nd-main-stat recall jumped (5/5 on smoke incl. `Atk 150`, `Hp 2280`)
+  but substat/name recall dropped vs WinOcr — PageSegMode + preprocessing are
+  still WinOcr-tuned. Next lever: per-region PSM (`SingleLine` for strips,
+  `SingleBlock`/`Auto` for blocks) via `Engine.Process(pix, mode)`.
 
 ---
 

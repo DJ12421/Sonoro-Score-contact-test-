@@ -38,6 +38,7 @@ internal class Program
             else if (args[i] == "--no-winocr-fallback") ScannerConfig.UseWindowsOcrFallback = false;
             else if (args[i] == "--update-signatures") updateSignatures = true;
             else if (args[i] == "--signature-url" && i + 1 < args.Length) signatureUrl = args[++i];
+            else if (args[i] == "--diag-tess") return await DiagTesseract();
         }
 
         // Default test suite location
@@ -223,6 +224,50 @@ internal class Program
             Console.WriteLine($"[OK] GOOD file saved to:\n  {goodPath} ({results.Count - skipped} echoes, {skipped} skipped)");
         }
 
+        return 0;
+    }
+
+    /// <summary>Hidden diagnostic: why won't the Tesseract engine initialise here?</summary>
+    static async Task<int> DiagTesseract()
+    {
+        await Task.Yield();
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        Console.WriteLine($"bitness={(Environment.Is64BitProcess ? "x64" : "x86")}");
+        Console.WriteLine($"baseDir={baseDir}");
+        Console.WriteLine($"TESSDATA_PREFIX={Environment.GetEnvironmentVariable("TESSDATA_PREFIX") ?? "(unset)"}");
+
+        string[] candidates =
+        [
+            Path.Combine(baseDir, "tessdata"),
+            @"C:\tessshort",
+        ];
+        foreach (string dp in candidates)
+        {
+            string file = Path.Combine(dp, "eng.traineddata");
+            Console.WriteLine($"--- datapath={dp}");
+            try
+            {
+                var fi = new FileInfo(file);
+                Console.WriteLine($"  exists={fi.Exists} len={(fi.Exists ? fi.Length : -1)} attrs={(fi.Exists ? fi.Attributes.ToString() : "-")}");
+                using var fs = File.OpenRead(file);
+                byte[] magic = new byte[8];
+                fs.ReadExactly(magic);
+                Console.WriteLine($"  managed-read-ok magic={BitConverter.ToString(magic)}");
+            }
+            catch (Exception ex) { Console.WriteLine($"  managed-read-FAIL: {ex.GetType().Name}: {ex.Message}"); }
+
+            try
+            {
+                using var engine = new Tesseract.TesseractEngine(dp, "eng", Tesseract.EngineMode.Default);
+                Console.WriteLine("  ENGINE OK");
+            }
+            catch (Exception ex) { Console.WriteLine($"  ENGINE FAIL: {ex}"); }
+        }
+
+        foreach (var mod in System.Diagnostics.Process.GetCurrentProcess().Modules.Cast<System.Diagnostics.ProcessModule>()
+            .Where(m => m.ModuleName.Contains("tesseract", StringComparison.OrdinalIgnoreCase)
+                     || m.ModuleName.Contains("leptonica", StringComparison.OrdinalIgnoreCase)))
+            Console.WriteLine($"native: {mod.ModuleName} <- {mod.FileName}");
         return 0;
     }
 }
