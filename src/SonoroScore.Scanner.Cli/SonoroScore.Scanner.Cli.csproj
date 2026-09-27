@@ -5,15 +5,10 @@
     <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>AlephalSonata</RootNamespace>
-    <AssemblyName>AlephalSonata</AssemblyName>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <UseWindowsForms>true</UseWindowsForms>
     <Platforms>x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SonoroScore.Core\SonoroScore.Core.csproj" />
     <ProjectReference Include="..\SonoroScore.Scanner\SonoroScore.Scanner.csproj" />
   </ItemGroup>
 

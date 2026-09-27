@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AlephalSonata.Automation;
 using AlephalSonata.Native;
+using SonoroScore.Scanner;
 
 namespace AlephalSonata;
 
@@ -92,10 +94,13 @@ internal class Program
             Console.WriteLine("7. Test Step-by-Step Nav ('C', Sidebar, Slot) & Timings/Intervals");
             Console.WriteLine("8. Open Images Directory (aleph_images)");
             Console.WriteLine("9. Open Logs Directory");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("A. Run OCR Echo Scanner on aleph_images test suite -> JSON");
+            Console.ResetColor();
             Console.WriteLine("0. Exit");
-            Console.Write("\nSelect an action [0-9]: ");
+            Console.Write("\nSelect an action [0-9, A]: ");
 
-            var choice = Console.ReadLine()?.Trim();
+            var choice = Console.ReadLine()?.Trim().ToUpperInvariant();
             if (choice == "0") break;
 
             using var cts = new CancellationTokenSource();
@@ -266,6 +271,10 @@ internal class Program
                     });
                     break;
 
+                case "A":
+                    await RunScannerAsync(imagesDir, cts.Token);
+                    break;
+
                 default:
                     Console.WriteLine("Invalid option.");
                     break;
@@ -273,6 +282,170 @@ internal class Program
         }
 
         _logWriter?.Dispose();
+    }
+
+    private static async Task RunScannerAsync(string imagesDir, CancellationToken ct)
+    {
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("--- OCR ECHO SCANNER (ADAPTED FROM TACET-LAB PIPELINE) ---");
+        Console.ResetColor();
+
+        // ── Database source ────────────────────────────────────────────────
+        Console.WriteLine("Database source:");
+        Console.WriteLine("  1. Fetch from internet (nanoka.cc, always up-to-date)");
+        Console.WriteLine("  2. Use local cache (echo_catalog.json next to exe, faster)");
+        Console.WriteLine("  3. Load from custom JSON file path");
+        Console.Write("Select [1/2/3, default=1]: ");
+        var dbChoice = Console.ReadLine()?.Trim();
+
+        EchoCatalogEntry[] catalog;
+        try
+        {
+            if (dbChoice == "2")
+            {
+                Log("INFO", "Loading echo catalog from local cache...");
+                catalog = await GameDatabase.LoadAsync(forceRefresh: false, log: m => Log("DEBUG", m));
+            }
+            else if (dbChoice == "3")
+            {
+                Console.Write("Path to echo JSON file: ");
+                var customPath = Console.ReadLine()?.Trim() ?? "";
+                if (!File.Exists(customPath)) { Log("ERROR", $"File not found: {customPath}"); return; }
+                Log("INFO", $"Loading catalog from {customPath}...");
+                catalog = await GameDatabase.LoadFromFileAsync(customPath);
+            }
+            else
+            {
+                Log("INFO", "Fetching echo catalog from nanoka.cc (internet)...");
+                catalog = await GameDatabase.LoadAsync(forceRefresh: true, log: m => Log("DEBUG", m));
+            }
+            Log("OK", $"Catalog loaded: {catalog.Length} echoes.");
+        }
+        catch (Exception ex)
+        {
+            Log("ERROR", $"Failed to load catalog: {ex.Message}");
+            return;
+        }
+
+        // ── Session selection ──────────────────────────────────────────────
+        if (!Directory.Exists(imagesDir) || Directory.GetDirectories(imagesDir).Length == 0)
+        {
+            string fallbackPublish = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "../../../../publish/AlephalSonata/aleph_images"));
+            string fallbackPublish2 = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "../../publish/AlephalSonata/aleph_images"));
+            if (Directory.Exists(fallbackPublish) && Directory.GetDirectories(fallbackPublish).Length > 0)
+                imagesDir = fallbackPublish;
+            else if (Directory.Exists(fallbackPublish2) && Directory.GetDirectories(fallbackPublish2).Length > 0)
+                imagesDir = fallbackPublish2;
+        }
+
+        var sessions = Directory.Exists(imagesDir) ? Directory.GetDirectories(imagesDir) : Array.Empty<string>();
+        if (sessions.Length == 0)
+        {
+            Console.Write($"No sessions in {imagesDir}. Enter custom image folder: ");
+            var customDir = Console.ReadLine()?.Trim();
+            if (!string.IsNullOrEmpty(customDir) && Directory.Exists(customDir))
+            {
+                imagesDir = customDir;
+                sessions = Directory.GetDirectories(imagesDir);
+                if (sessions.Length == 0 && Directory.GetFiles(imagesDir, "*.png").Length > 0)
+                {
+                    // The entered directory itself contains the images
+                    sessions = new[] { imagesDir };
+                }
+            }
+            if (sessions.Length == 0)
+            {
+                Log("ERROR", $"No session folders found in {imagesDir}");
+                return;
+            }
+        }
+
+        Console.WriteLine("\nAvailable sessions:");
+        for (int i = 0; i < sessions.Length; i++)
+            Console.WriteLine($"  {i + 1}. {Path.GetFileName(sessions[i])}");
+        Console.Write($"Select session [1-{sessions.Length}, default=1]: ");
+        var sessInput = Console.ReadLine()?.Trim();
+        int sessIdx = int.TryParse(sessInput, out int si) && si >= 1 && si <= sessions.Length ? si - 1 : 0;
+        string sessionPath = sessions[sessIdx];
+
+        // ── Limit ──────────────────────────────────────────────────────────
+        Console.Write("Max images to scan [default: all]: ");
+        var limitStr = Console.ReadLine()?.Trim();
+        int limit = int.TryParse(limitStr, out int lv) && lv > 0 ? lv : int.MaxValue;
+
+        // ── Run ─────────────────────────────────────────────────────────────
+        var imageFiles = Directory.GetFiles(sessionPath, "echo_*.png")
+            .OrderBy(f => f)
+            .Take(limit)
+            .ToArray();
+
+        Log("INFO", $"Scanning {imageFiles.Length} images in {Path.GetFileName(sessionPath)}...");
+        Log("INFO", "This may take a minute (Windows OCR per image). Press Ctrl+C to abort.");
+
+        var recognizer = new EchoRecognizer(catalog, m => Log("DEBUG", m));
+        var results    = new List<EchoScanResult>();
+        int done = 0;
+
+        foreach (var imgPath in imageFiles)
+        {
+            ct.ThrowIfCancellationRequested();
+            var result = await recognizer.RecognizeAsync(imgPath);
+            results.Add(result);
+            done++;
+
+            string nameStr  = result.EchoName?.Value as string ?? "?";
+            string statStr  = result.MainStatKey?.Value as string ?? "?";
+            string conf     = result.EchoName?.Confidence.ToString("F2") ?? "—";
+            string icon = result.Errors.Count > 0 ? "x" : result.IsComplete ? "+" : "~";
+            Log(result.Errors.Count > 0 ? "WARN" : "OK",
+                $"  [{done,3}/{imageFiles.Length}] {icon} {Path.GetFileName(imgPath)} -> {nameStr} (conf:{conf}) | {statStr} | {result.Substats.Count} substats");
+        }
+
+        // ── Summary ─────────────────────────────────────────────────────────
+        int identified = results.Count(r => r.EchoName?.Value != null);
+        int complete   = results.Count(r => r.IsComplete);
+        float nameRate = results.Count > 0 ? (float)identified / results.Count : 0;
+        float statRate = results.Count > 0 ? (float)results.Count(r => r.MainStatKey?.Value != null) / results.Count : 0;
+        float subAvg   = results.Count > 0 ? (float)results.Average(r => r.Substats.Count) : 0;
+
+        var session = new ScanSessionResult
+        {
+            SessionPath        = sessionPath,
+            RunAt              = DateTime.UtcNow,
+            DatabaseVersion    = GameDatabase.DataVersion,
+            TotalImages        = imageFiles.Length,
+            SuccessfulScans    = identified,
+            CompleteEchoes     = complete,
+            NameDetectionRate  = nameRate,
+            MainStatDetectionRate = statRate,
+            SubstatAvg         = subAvg,
+            Results            = results,
+        };
+
+        // ── Save JSON ────────────────────────────────────────────────────────
+        string outputPath = Path.Combine(sessionPath,
+            $"scan_results_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+        var jsonOpts = new JsonSerializerOptions { WriteIndented = true };
+        await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(session, jsonOpts), ct);
+
+        Console.WriteLine();
+        Log("OK",   $"Scan complete!");
+        Log("INFO", $"  Images scanned   : {imageFiles.Length}");
+        Log("INFO", $"  Names identified : {identified} ({nameRate:P0})");
+        Log("INFO", $"  Complete echoes  : {complete} ({(results.Count > 0 ? (float)complete / results.Count : 0):P0})");
+        Log("INFO", $"  Main stat rate   : {statRate:P0}");
+        Log("INFO", $"  Avg substats     : {subAvg:F1}");
+        Log("OK",   $"  Results saved to : {outputPath}");
+
+        Console.Write("\nOpen results JSON? [Y/n]: ");
+        if (Console.ReadLine()?.Trim().ToLowerInvariant() != "n")
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = outputPath, UseShellExecute = true
+            });
+        }
     }
 
     private static void PrintBanner()

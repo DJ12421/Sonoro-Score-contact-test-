@@ -19,7 +19,7 @@ public class NavigationConfig
     public int KeyHoldMs { get; set; } = 80;
 
     // Navigation step intervals / wait delays (ms)
-    public int AfterKeyCIntervalMs { get; set; } = 1500;         // Delay after 'C' for Character menu camera zoom & render
+    public int AfterKeyCIntervalMs { get; set; } = 1800;         // Delay after 'C' for Character menu camera zoom & render
     public int AfterSidebarClickIntervalMs { get; set; } = 1200; // Delay after clicking Echo Sidebar icon for tab transition
     public int AfterSlotClickIntervalMs { get; set; } = 1200;    // Delay after clicking Equipped Echo slot to load picker modal
 
