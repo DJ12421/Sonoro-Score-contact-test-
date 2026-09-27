@@ -34,6 +34,8 @@ public partial class MainReviewForm : Form
     // Controls
     private ToolStripStatusLabel _statusLabel = null!;
     private ToolStripLabel _sessionInfoLabel = null!;
+    private SplitContainer _mainSplit = null!;
+    private SplitContainer _contentSplit = null!;
     private ListView _echoListView = null!;
     private TextBox _searchBox = null!;
     private ComboBox _filterCombo = null!;
@@ -174,40 +176,98 @@ public partial class MainReviewForm : Form
         _statusLabel = new ToolStripStatusLabel("Ready") { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
         statusStrip.Items.Add(_statusLabel);
 
-        // 3. Main Split: Left (List 280px) | Right Split (Center Image & Right Editor)
-        var mainSplit = new SplitContainer
+        // 3. Main Split: Left (List 310px) | Right Split (Center Image & Right Editor 430px)
+        // NOTE: SplitterDistance is (re)applied in OnLoad once layout exists —
+        // assigning it here while containers are still default-sized squeezes panels.
+        _mainSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             SplitterDistance = 310,
             SplitterWidth = 6,
             BackColor = BgDark,
-            FixedPanel = FixedPanel.Panel1
+            FixedPanel = FixedPanel.Panel1,
+            Panel1MinSize = 200,
+            Panel2MinSize = 500
         };
 
         // Left Panel: Search, Filter, ListView
         var leftPanel = CreateLeftPanel();
-        mainSplit.Panel1.Controls.Add(leftPanel);
+        _mainSplit.Panel1.Controls.Add(leftPanel);
 
         // Right Split: Center (Screenshot) | Right (Editor 430px)
-        var contentSplit = new SplitContainer
+        _contentSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             SplitterDistance = 640,
             SplitterWidth = 6,
             BackColor = BgDark,
-            FixedPanel = FixedPanel.Panel2
+            FixedPanel = FixedPanel.Panel2,
+            Panel1MinSize = 300,
+            Panel2MinSize = 320
         };
 
         var centerPanel = CreateCenterImagePanel();
         var rightPanel  = CreateRightEditorPanel();
 
-        contentSplit.Panel1.Controls.Add(centerPanel);
-        contentSplit.Panel2.Controls.Add(rightPanel);
-        mainSplit.Panel2.Controls.Add(contentSplit);
+        _contentSplit.Panel1.Controls.Add(centerPanel);
+        _contentSplit.Panel2.Controls.Add(rightPanel);
+        _mainSplit.Panel2.Controls.Add(_contentSplit);
 
-        Controls.Add(mainSplit);
+        Controls.Add(_mainSplit);
         Controls.Add(toolStrip);
         Controls.Add(statusStrip);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        // Restore previous size + sections, else the 310 / center / 430 defaults.
+        // Distances are set here (post-layout), never while containers are unlaid-out.
+        try
+        {
+            var saved = GuiLayout.Load();
+            var area = Screen.FromControl(this).WorkingArea;
+            if (saved.TryGetValue("mainWidth", out int w) && saved.TryGetValue("mainHeight", out int h))
+            {
+                w = Math.Clamp(w, MinimumSize.Width, Math.Max(MinimumSize.Width, area.Width));
+                h = Math.Clamp(h, MinimumSize.Height, Math.Max(MinimumSize.Height, area.Height));
+                Size = new Size(w, h);
+                PerformLayout();
+            }
+
+            int mainDist = saved.TryGetValue("mainSplit", out int sm) ? sm : 310;
+            _mainSplit.SplitterDistance = Math.Clamp(mainDist, _mainSplit.Panel1MinSize,
+                Math.Max(_mainSplit.Panel1MinSize, _mainSplit.Width - _mainSplit.Panel2MinSize - _mainSplit.SplitterWidth));
+
+            int contentDist;
+            if (saved.TryGetValue("contentSplit", out int sc))
+            {
+                contentDist = sc;
+            }
+            else
+            {
+                contentDist = _contentSplit.Width - 430 - _contentSplit.SplitterWidth; // right editor 430px
+            }
+            _contentSplit.SplitterDistance = Math.Clamp(contentDist, _contentSplit.Panel1MinSize,
+                Math.Max(_contentSplit.Panel1MinSize, _contentSplit.Width - _contentSplit.Panel2MinSize - _contentSplit.SplitterWidth));
+        }
+        catch { /* keep designer defaults */ }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        try
+        {
+            GuiLayout.Save(new Dictionary<string, int>
+            {
+                ["mainWidth"] = Width,
+                ["mainHeight"] = Height,
+                ["mainSplit"] = _mainSplit.SplitterDistance,
+                ["contentSplit"] = _contentSplit.SplitterDistance
+            });
+        }
+        catch { /* layout save is best-effort */ }
+        base.OnFormClosing(e);
     }
 
     private Control CreateLeftPanel()
