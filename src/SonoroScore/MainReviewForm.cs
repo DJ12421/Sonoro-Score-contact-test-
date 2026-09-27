@@ -182,7 +182,6 @@ public partial class MainReviewForm : Form
         _mainSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            SplitterDistance = 310,
             SplitterWidth = 6,
             BackColor = BgDark,
             FixedPanel = FixedPanel.Panel1,
@@ -198,7 +197,6 @@ public partial class MainReviewForm : Form
         _contentSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            SplitterDistance = 640,
             SplitterWidth = 6,
             BackColor = BgDark,
             FixedPanel = FixedPanel.Panel2,
