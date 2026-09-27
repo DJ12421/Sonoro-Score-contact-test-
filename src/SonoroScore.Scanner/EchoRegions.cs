@@ -26,33 +26,29 @@ public static class EchoRegions
     public const string OverrideFileName = "regions.override.json";
 
     // ── Compiled defaults ─────────────────────────────────────────────────
-    // Calibrated via probe on 1920x1080 capture → panel 361x841px
-    //   Echo Skill header  → y ≈ 0.43  (364px)
-    //   Sonata Effect hdr  → y ≈ 0.67  (560px)
-    //   Equipped by text   → y ≈ 0.97+ (>816px)
+    // Calibrated by hand in the SS area-config dialog (2026-09-28) against a
+    // 1920x1080 capture → panel 361x841px. User-tuned values supersede the
+    // original probe estimates; see regions.override.json history.
     private static readonly Dictionary<string, RectangleF> _defaults = new()
     {
-        ["EchoName"]      = new(0f,        0f,      0.770f,  0.061f),
+        ["EchoName"]      = new(0f,        0.02f,   0.770f,  0.0395f),
         ["Level"]         = new(0.776f,    0.018f,  0.119f,  0.037f),
-        ["Cost"]          = new(0.018f,    0.065f,  0.241f,  0.031f),
-        ["MainStatStrip"] = new(0.080f,    0.110f,  0.900f,  0.055f),
-        // Second main-stat line under the primary strip (placeholder — user calibrates).
-        ["SecondMainStat"] = new(0.080f,   0.160f,  0.900f,  0.035f),
-        // Five substat slots: placeholders splitting the old unified block
-        // (0.040, 0.195, 0.920, 0.225). User calibrates each; SubstatsBlock follows.
-        ["Substat1"]      = new(0.040f,    0.195f,  0.920f,  0.045f),
-        ["Substat2"]      = new(0.040f,    0.240f,  0.920f,  0.045f),
-        ["Substat3"]      = new(0.040f,    0.285f,  0.920f,  0.045f),
-        ["Substat4"]      = new(0.040f,    0.330f,  0.920f,  0.045f),
-        ["Substat5"]      = new(0.040f,    0.375f,  0.920f,  0.045f),
+        ["Cost"]          = new(0.0215f,   0.0715f, 0.2505f, 0.026f),
+        ["MainStatStrip"] = new(0.1065f,   0.1225f, 0.8735f, 0.039f),
+        // Second main-stat line under the primary strip.
+        ["SecondMainStat"] = new(0.1065f,  0.1695f, 0.8735f, 0.034f),
+        // Five individually tuned substat slots; SubstatsBlock follows as union.
+        ["Substat1"]      = new(0.1075f,   0.21f,   0.8525f, 0.034f),
+        ["Substat2"]      = new(0.1075f,   0.252f,  0.8525f, 0.034f),
+        ["Substat3"]      = new(0.1075f,   0.293f,  0.8525f, 0.0365f),
+        ["Substat4"]      = new(0.1075f,   0.3375f, 0.8525f, 0.032f),
+        ["Substat5"]      = new(0.1075f,   0.3805f, 0.8525f, 0.033f),
         // Sonata icon to the right of the "Sonata Effect" heading.
-        // From Tacet-Lab regions.ts: x=0.88, y=0.008, w=0.115, h=0.065 (panel-relative).
-        ["SonataIcon"]    = new(0.88f,     0.008f,  0.115f,  0.065f),
-        // Zone B: Echo Skill + Sonata Effect (y=0.44..0.94, handles 1-line and
-        // multi-line Echo Skill descriptions across Cost 1/3/4 echoes).
-        ["SonataZone"]    = new(0.000f,    0.440f,  1.000f,  0.500f),
+        ["SonataIcon"]    = new(0.901f,    0.0195f, 0.081f,  0.0385f),
+        // Zone B: Echo Skill + Sonata Effect text.
+        ["SonataZone"]    = new(0.000f,    0.462f,  1.000f,  0.478f),
         // Zone C: "Equipped by [Character]" footer strip.
-        ["OwnerZone"]     = new(0.000f,    0.940f,  1.000f,  0.060f),
+        ["OwnerZone"]     = new(0.0295f,   0.956f,  0.9705f, 0.044f),
     };
 
     /// <summary>Editable region names in stable display order.</summary>
