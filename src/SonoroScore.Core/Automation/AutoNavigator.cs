@@ -42,12 +42,24 @@ public class AutoNavigator
     }
 
     public Task<bool> NavigateToEchoPickerAsync(CancellationToken ct = default)
-        => NavigateToEchoPickerAsync(null, null, ct);
+        => NavigateToEchoPickerAsync(null, null, null, null, null, ct);
 
-    public async Task<bool> NavigateToEchoPickerAsync(int? sidebarHoldMs, int? slotHoldMs = null, CancellationToken ct = default)
+    public Task<bool> NavigateToEchoPickerAsync(int? sidebarHoldMs, int? slotHoldMs = null, CancellationToken ct = default)
+        => NavigateToEchoPickerAsync(sidebarHoldMs, slotHoldMs, null, null, null, ct);
+
+    public async Task<bool> NavigateToEchoPickerAsync(
+        int? sidebarHoldMs,
+        int? slotHoldMs = null,
+        int? afterCIntervalMs = null,
+        int? afterSidebarIntervalMs = null,
+        int? afterSlotIntervalMs = null,
+        CancellationToken ct = default)
     {
         int sbHold = sidebarHoldMs ?? _config.SidebarClickHoldMs;
         int slHold = slotHoldMs ?? _config.SlotClickHoldMs;
+        int cDelay = afterCIntervalMs ?? _config.AfterKeyCIntervalMs;
+        int sbDelay = afterSidebarIntervalMs ?? _config.AfterSidebarClickIntervalMs;
+        int slDelay = afterSlotIntervalMs ?? _config.AfterSlotClickIntervalMs;
 
         Report(NavigationStep.FocusWindow, "Bringing Wuthering Waves to foreground...");
         if (!await WindowManager.EnsureForegroundAsync())
@@ -60,9 +72,9 @@ public class AutoNavigator
         if (!CheckFocus()) return false;
 
         // Step 1: Open Character menu via 'C'
-        Report(NavigationStep.OpenCharacterMenu, $"Sending 'C' to open Character menu (hold: {_config.KeyHoldMs}ms)...");
+        Report(NavigationStep.OpenCharacterMenu, $"Sending 'C' to open Character menu (hold: {_config.KeyHoldMs}ms, wait: {cDelay}ms)...");
         await _input.SendKeyAsync("C", holdMs: _config.KeyHoldMs, ct: ct);
-        await Task.Delay(1200, ct);
+        await Task.Delay(cDelay, ct);
         if (!CheckFocus()) return false;
 
         if (!WindowManager.GetGameBounds(out var bounds))
@@ -74,17 +86,17 @@ public class AutoNavigator
         // Step 2: Click Echo tab on left sidebar (calibrated: 120ms)
         int sidebarX = bounds.Left + (int)(bounds.Width * _config.EchoSidebarFraction.X);
         int sidebarY = bounds.Top + (int)(bounds.Height * _config.EchoSidebarFraction.Y);
-        Report(NavigationStep.ClickEchoTab, $"Clicking Echo sidebar icon at ({sidebarX}, {sidebarY}) with hold={sbHold}ms...");
+        Report(NavigationStep.ClickEchoTab, $"Clicking Echo sidebar icon at ({sidebarX}, {sidebarY}) with hold={sbHold}ms, wait={sbDelay}ms...");
         await _input.SendClickAsync(sidebarX, sidebarY, holdMs: sbHold, ct: ct);
-        await Task.Delay(1000, ct);
+        await Task.Delay(sbDelay, ct);
         if (!CheckFocus()) return false;
 
         // Step 3: Click top equipped echo slot (calibrated: 60ms)
         int slotX = bounds.Left + (int)(bounds.Width * _config.EchoSlotFraction.X);
         int slotY = bounds.Top + (int)(bounds.Height * _config.EchoSlotFraction.Y);
-        Report(NavigationStep.ClickEchoSlot, $"Clicking equipped echo slot at ({slotX}, {slotY}) with hold={slHold}ms...");
+        Report(NavigationStep.ClickEchoSlot, $"Clicking equipped echo slot at ({slotX}, {slotY}) with hold={slHold}ms, wait={slDelay}ms...");
         await _input.SendClickAsync(slotX, slotY, holdMs: slHold, ct: ct);
-        await Task.Delay(_config.LandingDelayMs, ct);
+        await Task.Delay(slDelay, ct);
 
         Report(NavigationStep.EchoPickerReady, "Echo picker is open and ready.");
         return CheckFocus();

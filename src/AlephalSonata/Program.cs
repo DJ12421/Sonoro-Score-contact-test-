@@ -89,7 +89,7 @@ internal class Program
             Console.WriteLine("4. Run Full Auto-Navigation with Verbose Tracing");
             Console.WriteLine("5. Run Active Picker Crawl with Verbose Tracing");
             Console.WriteLine("6. Capture Raw Screen Dataset (Pre-Animation Low-Noise Test Suite)");
-            Console.WriteLine("7. Test Step-by-Step Nav Click ('C', Sidebar, Slot) with Custom Hold");
+            Console.WriteLine("7. Test Step-by-Step Nav ('C', Sidebar, Slot) & Timings/Intervals");
             Console.WriteLine("8. Open Images Directory (aleph_images)");
             Console.WriteLine("9. Open Logs Directory");
             Console.WriteLine("0. Exit");
@@ -125,9 +125,29 @@ internal class Program
                     var p4Str = Console.ReadLine()?.Trim();
                     int p4 = int.TryParse(p4Str, out int v4) && v4 > 0 ? v4 : 3;
 
-                    Log("INFO", $"Starting full navigation (Sidebar: {config.SidebarClickHoldMs}ms, Slot: {config.SlotClickHoldMs}ms, Cards: {config.DefaultClickHoldMs}ms) in 2 seconds... (Alt+Tab to cancel)");
+                    Console.Write($"Customize nav intervals (current: C={config.AfterKeyCIntervalMs}ms, Tab={config.AfterSidebarClickIntervalMs}ms, Slot={config.AfterSlotClickIntervalMs}ms)? [y/N]: ");
+                    var p4Cust = Console.ReadLine()?.Trim().ToLowerInvariant();
+                    int cWait4 = config.AfterKeyCIntervalMs;
+                    int sbWait4 = config.AfterSidebarClickIntervalMs;
+                    int slWait4 = config.AfterSlotClickIntervalMs;
+                    if (p4Cust == "y" || p4Cust == "yes")
+                    {
+                        Console.Write($"Interval after 'C' in ms [Default: {config.AfterKeyCIntervalMs}]: ");
+                        var cStr = Console.ReadLine()?.Trim();
+                        if (int.TryParse(cStr, out int cw) && cw >= 0) cWait4 = cw;
+
+                        Console.Write($"Interval after Sidebar click in ms [Default: {config.AfterSidebarClickIntervalMs}]: ");
+                        var sbStr = Console.ReadLine()?.Trim();
+                        if (int.TryParse(sbStr, out int sbw) && sbw >= 0) sbWait4 = sbw;
+
+                        Console.Write($"Interval after Slot click in ms [Default: {config.AfterSlotClickIntervalMs}]: ");
+                        var slStr = Console.ReadLine()?.Trim();
+                        if (int.TryParse(slStr, out int slw) && slw >= 0) slWait4 = slw;
+                    }
+
+                    Log("INFO", $"Starting full navigation (Delays: C={cWait4}ms, Tab={sbWait4}ms, Slot={slWait4}ms | Holds: Sidebar={config.SidebarClickHoldMs}ms, Slot={config.SlotClickHoldMs}ms, Cards={config.DefaultClickHoldMs}ms) in 2 seconds... (Alt+Tab to cancel)");
                     await Task.Delay(2000, cts.Token);
-                    var ok = await navigator.NavigateToEchoPickerAsync(cts.Token);
+                    var ok = await navigator.NavigateToEchoPickerAsync(null, null, cWait4, sbWait4, slWait4, cts.Token);
                     if (ok)
                     {
                         await navigator.CrawlEchoGridAsync(p4, cts.Token);
@@ -381,12 +401,12 @@ internal class Program
     {
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("--- TEST STEP-BY-STEP NAVIGATION CLICKS ---");
+        Console.WriteLine("--- TEST STEP-BY-STEP NAVIGATION TIMINGS ---");
         Console.ResetColor();
         Console.WriteLine("1. Test Key 'C' (Open Character Menu)");
-        Console.WriteLine("2. Test Echo Sidebar Icon Click");
-        Console.WriteLine("3. Test Equipped Echo Slot Click");
-        Console.WriteLine("4. Test Full 3-Step Sequence (C -> Sidebar -> Slot)");
+        Console.WriteLine("2. Test Echo Sidebar Icon Click (custom hold)");
+        Console.WriteLine("3. Test Equipped Echo Slot Click (custom hold)");
+        Console.WriteLine("4. Test Full 3-Step Sequence (C -> Sidebar -> Slot) with custom holds & intervals");
         Console.Write("Select action [1-4]: ");
         var sub = Console.ReadLine()?.Trim();
 
@@ -436,16 +456,35 @@ internal class Program
                 break;
 
             case "4":
-                Log("INFO", $"Running step 1: 'C' (hold={config.KeyHoldMs}ms)...");
+                Console.WriteLine($"Current defaults — Holds: C={config.KeyHoldMs}ms, Sidebar={config.SidebarClickHoldMs}ms, Slot={config.SlotClickHoldMs}ms");
+                Console.WriteLine($"                — Intervals: AfterC={config.AfterKeyCIntervalMs}ms, AfterTab={config.AfterSidebarClickIntervalMs}ms, AfterSlot={config.AfterSlotClickIntervalMs}ms");
+
+                Console.Write($"Interval after 'C' in ms [Default: {config.AfterKeyCIntervalMs}]: ");
+                var cInterStr = Console.ReadLine()?.Trim();
+                int cInter = int.TryParse(cInterStr, out int ci) && ci >= 0 ? ci : config.AfterKeyCIntervalMs;
+
+                Console.Write($"Interval after Sidebar click in ms [Default: {config.AfterSidebarClickIntervalMs}]: ");
+                var sbInterStr = Console.ReadLine()?.Trim();
+                int sbInter = int.TryParse(sbInterStr, out int sbi) && sbi >= 0 ? sbi : config.AfterSidebarClickIntervalMs;
+
+                Console.Write($"Interval after Slot click in ms [Default: {config.AfterSlotClickIntervalMs}]: ");
+                var slInterStr = Console.ReadLine()?.Trim();
+                int slInter = int.TryParse(slInterStr, out int sli) && sli >= 0 ? sli : config.AfterSlotClickIntervalMs;
+
+                Log("INFO", $"Sequence: C(hold={config.KeyHoldMs}ms) --[{cInter}ms]--> Sidebar(hold={config.SidebarClickHoldMs}ms) --[{sbInter}ms]--> Slot(hold={config.SlotClickHoldMs}ms) --[{slInter}ms]--> Done");
+
+                Log("INFO", $"Running step 1: 'C' (hold={config.KeyHoldMs}ms, interval={cInter}ms)...");
                 await input.SendKeyAsync("C", holdMs: config.KeyHoldMs, ct: ct);
-                await Task.Delay(1200, ct);
+                await Task.Delay(cInter, ct);
 
-                Log("INFO", $"Running step 2: Sidebar Icon at ({sidebarX}, {sidebarY}) (calibrated hold={config.SidebarClickHoldMs}ms)...");
+                Log("INFO", $"Running step 2: Sidebar Icon at ({sidebarX}, {sidebarY}) (hold={config.SidebarClickHoldMs}ms, interval={sbInter}ms)...");
                 await input.SendClickAsync(sidebarX, sidebarY, holdMs: config.SidebarClickHoldMs, ct: ct);
-                await Task.Delay(1000, ct);
+                await Task.Delay(sbInter, ct);
 
-                Log("INFO", $"Running step 3: Equipped Slot at ({slotX}, {slotY}) (calibrated hold={config.SlotClickHoldMs}ms)...");
+                Log("INFO", $"Running step 3: Equipped Slot at ({slotX}, {slotY}) (hold={config.SlotClickHoldMs}ms, interval={slInter}ms)...");
                 await input.SendClickAsync(slotX, slotY, holdMs: config.SlotClickHoldMs, ct: ct);
+                await Task.Delay(slInter, ct);
+
                 Log("OK", "Step sequence dispatched.");
                 break;
         }
