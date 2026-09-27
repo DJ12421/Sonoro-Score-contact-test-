@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -16,6 +17,7 @@ public partial class MainReviewForm : Form
     private readonly List<EchoReviewItem> _filteredItems = [];
     private int _currentIndex = -1;
     private bool _focusPanelCrop = true;
+    private bool _isLoading = false;
     private EchoCatalogEntry[] _catalog = [];
 
     // UI Colors (Modern Dark Theme)
@@ -117,15 +119,15 @@ public partial class MainReviewForm : Form
         foreach (var e in _catalog.OrderBy(e => e.Name))
             _nameCombo.Items.Add(e.Name);
 
-        // Stat keys
-        string[] statNames = Enum.GetNames<StatKey>().Where(k => k != "Unknown").ToArray();
+        // Stat display names (user friendly)
+        string[] statDisplays = StatDisplayNames.AllDisplayNames;
         _mainStatKeyCombo.Items.Clear();
-        _mainStatKeyCombo.Items.AddRange(statNames);
+        _mainStatKeyCombo.Items.AddRange(statDisplays);
 
         for (int i = 0; i < 5; i++)
         {
             _subKeyCombos[i].Items.Clear();
-            _subKeyCombos[i].Items.AddRange(statNames);
+            _subKeyCombos[i].Items.AddRange(statDisplays);
         }
 
         // Sonatas
@@ -180,7 +182,7 @@ public partial class MainReviewForm : Form
         var mainSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            SplitterDistance = 300,
+            SplitterDistance = 310,
             SplitterWidth = 6,
             BackColor = BgDark,
             FixedPanel = FixedPanel.Panel1
@@ -190,7 +192,7 @@ public partial class MainReviewForm : Form
         var leftPanel = CreateLeftPanel();
         mainSplit.Panel1.Controls.Add(leftPanel);
 
-        // Right Split: Center (Screenshot) | Right (Editor 420px)
+        // Right Split: Center (Screenshot) | Right (Editor 430px)
         var contentSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
@@ -264,10 +266,10 @@ public partial class MainReviewForm : Form
             ForeColor = FgPrimary,
             BorderStyle = BorderStyle.None
         };
-        _echoListView.Columns.Add("Status", 70);
-        _echoListView.Columns.Add("Echo Name", 130);
-        _echoListView.Columns.Add("Lv", 38);
-        _echoListView.Columns.Add("Main", 55);
+        _echoListView.Columns.Add("Status", 75);
+        _echoListView.Columns.Add("Echo Name", 125);
+        _echoListView.Columns.Add("Lv", 36);
+        _echoListView.Columns.Add("Main Stat", 65);
 
         _echoListView.SelectedIndexChanged += (s, e) =>
         {
@@ -396,40 +398,46 @@ public partial class MainReviewForm : Form
         AddLabeledControl(mainGroup, "Value:", _mainStatValueBox = new TextBox(), 1);
         _mainStatValueBox.TextChanged += (s, e) => OnFieldChanged();
 
-        // Group 3: Substats Card (5 rows)
+        // Group 3: Substats Card (5 rows in strict top-to-bottom #1 to #5 order)
         var subGroup = CreateCardGroup("Substats (Tuned Rolls)");
         subGroup.Dock = DockStyle.Top;
-        subGroup.Height = 220;
+        subGroup.Height = 225;
 
         for (int i = 0; i < 5; i++)
         {
             int rowIdx = i;
-            var rowPanel = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = Color.Transparent };
+            int yPos = 24 + i * 38;
+            var rowPanel = new Panel
+            {
+                Location = new Point(8, yPos),
+                Size = new Size(395, 34),
+                BackColor = Color.Transparent
+            };
 
-            _subActiveChecks[i] = new CheckBox { Text = $"#{i + 1}", Width = 48, Dock = DockStyle.Left, Checked = true, ForeColor = FgPrimary };
+            _subActiveChecks[i] = new CheckBox { Text = $"#{i + 1}", Location = new Point(0, 4), Size = new Size(46, 24), Checked = true, ForeColor = FgPrimary };
             _subActiveChecks[i].CheckedChanged += (s, e) => OnFieldChanged();
 
-            _subKeyCombos[i] = new ComboBox { Dock = DockStyle.Left, Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgInput, ForeColor = FgPrimary, FlatStyle = FlatStyle.Flat };
+            _subKeyCombos[i] = new ComboBox { Location = new Point(48, 3), Size = new Size(160, 24), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgInput, ForeColor = FgPrimary, FlatStyle = FlatStyle.Flat };
             _subKeyCombos[i].SelectedIndexChanged += (s, e) => OnFieldChanged();
 
-            _subValueBoxes[i] = new TextBox { Dock = DockStyle.Left, Width = 65, BackColor = BgInput, ForeColor = FgPrimary, BorderStyle = BorderStyle.FixedSingle };
+            _subValueBoxes[i] = new TextBox { Location = new Point(212, 3), Size = new Size(58, 24), BackColor = BgInput, ForeColor = FgPrimary, BorderStyle = BorderStyle.FixedSingle };
             _subValueBoxes[i].TextChanged += (s, e) =>
             {
                 UpdateSubstatGrade(rowIdx);
                 OnFieldChanged();
             };
 
-            _subSnapButtons[i] = new Button { Text = "⟳", Dock = DockStyle.Left, Width = 30, BackColor = BgInput, ForeColor = AccentAmber, FlatStyle = FlatStyle.Flat };
+            _subSnapButtons[i] = new Button { Text = "⟳", Location = new Point(274, 3), Size = new Size(26, 24), BackColor = BgInput, ForeColor = AccentAmber, FlatStyle = FlatStyle.Flat };
             _subSnapButtons[i].FlatAppearance.BorderSize = 0;
             _subSnapButtons[i].Click += (s, e) => SnapSubstat(rowIdx);
 
-            _subGradeLabels[i] = new Label { Dock = DockStyle.Fill, ForeColor = AccentGreen, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Italic) };
+            _subGradeLabels[i] = new Label { Location = new Point(304, 4), Size = new Size(88, 24), ForeColor = AccentGreen, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Italic) };
 
-            rowPanel.Controls.Add(_subGradeLabels[i]);
-            rowPanel.Controls.Add(_subSnapButtons[i]);
-            rowPanel.Controls.Add(_subValueBoxes[i]);
-            rowPanel.Controls.Add(_subKeyCombos[i]);
             rowPanel.Controls.Add(_subActiveChecks[i]);
+            rowPanel.Controls.Add(_subKeyCombos[i]);
+            rowPanel.Controls.Add(_subValueBoxes[i]);
+            rowPanel.Controls.Add(_subSnapButtons[i]);
+            rowPanel.Controls.Add(_subGradeLabels[i]);
 
             subGroup.Controls.Add(rowPanel);
         }
@@ -615,8 +623,8 @@ public partial class MainReviewForm : Form
                 i.Rarity,
                 i.Level,
                 i.Sonata,
-                MainStat = new { Key = i.MainStatKey, Value = i.MainStatValue },
-                Substats = i.Substats.Where(s => s.IsActive).Select(s => new { Key = s.StatKey, Value = s.Value, s.SnappedValue }).ToList(),
+                MainStat = new { Key = i.MainStatKey, Display = StatDisplayNames.ToDisplay(i.MainStatKey), Value = i.MainStatValue },
+                Substats = i.Substats.Where(s => s.IsActive).Select(s => new { Key = s.StatKey, Display = StatDisplayNames.ToDisplay(s.StatKey), Value = s.Value, s.SnappedValue }).ToList(),
                 i.IsVerified,
                 i.IsEdited
             })
@@ -659,7 +667,7 @@ public partial class MainReviewForm : Form
                 var lvi = new ListViewItem(item.DisplayStatus);
                 lvi.SubItems.Add(item.EchoName);
                 lvi.SubItems.Add($"+{item.Level}");
-                lvi.SubItems.Add(item.MainStatKey.Replace("Percent", "%").Replace("Damage", "DMG"));
+                lvi.SubItems.Add(StatDisplayNames.ToDisplay(item.MainStatKey));
                 lvi.Tag = item;
 
                 lvi.ForeColor = item.IsVerified ? AccentGreen
@@ -683,49 +691,57 @@ public partial class MainReviewForm : Form
 
     private void LoadItem(EchoReviewItem item)
     {
-        _currentIndex = _filteredItems.IndexOf(item);
-        _indexLabel.Text = $"Echo {_currentIndex + 1} of {_filteredItems.Count}";
-
-        // Bind Identity
-        _nameCombo.Text = item.EchoName;
-        _costCombo.Text = item.Cost.ToString();
-        _rarityCombo.SelectedIndex = Math.Clamp(5 - item.Rarity, 0, 3);
-        _levelNumeric.Value = Math.Clamp(item.Level, 0, 25);
-        _sonataCombo.Text = item.Sonata;
-
-        _nameConfLabel.Text = $"Confidence: {item.NameConfidence:P1} | File: {item.ImageFileName}";
-
-        // Bind Main Stat
-        _mainStatKeyCombo.Text = item.MainStatKey;
-        _mainStatValueBox.Text = item.MainStatValue > 0 ? item.MainStatValue.ToString("0.0#") : "";
-
-        // Bind Substats
-        for (int i = 0; i < 5; i++)
+        _isLoading = true;
+        try
         {
-            var sub = i < item.Substats.Count ? item.Substats[i] : null;
-            if (sub != null && sub.IsActive)
+            _currentIndex = _filteredItems.IndexOf(item);
+            _indexLabel.Text = $"Echo {_currentIndex + 1} of {_filteredItems.Count}";
+
+            // Bind Identity
+            _nameCombo.Text = item.EchoName;
+            _costCombo.Text = item.Cost.ToString();
+            _rarityCombo.SelectedIndex = Math.Clamp(5 - item.Rarity, 0, 3);
+            _levelNumeric.Value = Math.Clamp(item.Level, 0, 25);
+            _sonataCombo.Text = item.Sonata;
+
+            _nameConfLabel.Text = $"Confidence: {item.NameConfidence:P1} | File: {item.ImageFileName}";
+
+            // Bind Main Stat (convert enum key like "CritRate" to display like "Crit. Rate")
+            _mainStatKeyCombo.Text = StatDisplayNames.ToDisplay(item.MainStatKey);
+            _mainStatValueBox.Text = item.MainStatValue > 0 ? item.MainStatValue.ToString("0.0#", CultureInfo.InvariantCulture) : "";
+
+            // Bind Substats
+            for (int i = 0; i < 5; i++)
             {
-                _subActiveChecks[i].Checked = true;
-                _subKeyCombos[i].Text = sub.StatKey;
-                _subValueBoxes[i].Text = sub.Value > 0 ? sub.Value.ToString("0.0#") : "";
-                UpdateSubstatGrade(i);
+                var sub = i < item.Substats.Count ? item.Substats[i] : null;
+                if (sub != null && sub.IsActive)
+                {
+                    _subActiveChecks[i].Checked = true;
+                    _subKeyCombos[i].Text = StatDisplayNames.ToDisplay(sub.StatKey);
+                    _subValueBoxes[i].Text = sub.Value > 0 ? sub.Value.ToString("0.0#", CultureInfo.InvariantCulture) : "";
+                    UpdateSubstatGrade(i);
+                }
+                else
+                {
+                    _subActiveChecks[i].Checked = false;
+                    _subKeyCombos[i].SelectedIndex = -1;
+                    _subValueBoxes[i].Text = "";
+                    _subGradeLabels[i].Text = "";
+                }
             }
-            else
-            {
-                _subActiveChecks[i].Checked = false;
-                _subKeyCombos[i].SelectedIndex = -1;
-                _subValueBoxes[i].Text = "";
-                _subGradeLabels[i].Text = "";
-            }
+
+            // Evidence
+            _rawEvidenceBox.Text = $"[Name OCR]: {item.RawNameOcr}\r\n[Main OCR]: {item.RawMainStatOcr}\r\n[Substats OCR]:\r\n{item.RawSubstatsOcr}";
+            if (item.Warnings.Count > 0)
+                _rawEvidenceBox.Text += $"\r\n[Warnings]: {string.Join(", ", item.Warnings)}";
+
+            // Display Image
+            RefreshCurrentImage();
         }
-
-        // Evidence
-        _rawEvidenceBox.Text = $"[Name OCR]: {item.RawNameOcr}\r\n[Main OCR]: {item.RawMainStatOcr}\r\n[Substats OCR]:\r\n{item.RawSubstatsOcr}";
-        if (item.Warnings.Count > 0)
-            _rawEvidenceBox.Text += $"\r\n[Warnings]: {string.Join(", ", item.Warnings)}";
-
-        // Display Image
-        RefreshCurrentImage();
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private void RefreshCurrentImage()
@@ -759,6 +775,7 @@ public partial class MainReviewForm : Form
 
     private void OnFieldChanged()
     {
+        if (_isLoading) return;
         if (_currentIndex < 0 || _currentIndex >= _filteredItems.Count) return;
         var item = _filteredItems[_currentIndex];
 
@@ -768,8 +785,9 @@ public partial class MainReviewForm : Form
         item.Rarity = 5 - _rarityCombo.SelectedIndex;
         item.Level = (int)_levelNumeric.Value;
         item.Sonata = _sonataCombo.Text;
-        item.MainStatKey = _mainStatKeyCombo.Text;
-        if (float.TryParse(_mainStatValueBox.Text, out float mv)) item.MainStatValue = mv;
+        item.MainStatKey = StatDisplayNames.FromDisplay(_mainStatKeyCombo.Text);
+        if (float.TryParse(_mainStatValueBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float mv))
+            item.MainStatValue = mv;
 
         for (int i = 0; i < 5; i++)
         {
@@ -777,8 +795,9 @@ public partial class MainReviewForm : Form
             {
                 var sub = item.Substats[i];
                 sub.IsActive = _subActiveChecks[i].Checked;
-                sub.StatKey = _subKeyCombos[i].Text;
-                if (float.TryParse(_subValueBoxes[i].Text, out float sv)) sub.Value = sv;
+                sub.StatKey = StatDisplayNames.FromDisplay(_subKeyCombos[i].Text);
+                if (float.TryParse(_subValueBoxes[i].Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float sv))
+                    sub.Value = sv;
             }
         }
 
@@ -788,6 +807,7 @@ public partial class MainReviewForm : Form
             var lvi = _echoListView.SelectedItems[0];
             lvi.Text = item.DisplayStatus;
             lvi.SubItems[1].Text = item.EchoName;
+            lvi.SubItems[3].Text = StatDisplayNames.ToDisplay(item.MainStatKey);
             lvi.ForeColor = item.IsVerified ? AccentGreen : AccentAmber;
         }
     }
@@ -800,14 +820,15 @@ public partial class MainReviewForm : Form
             return;
         }
 
-        string keyStr = _subKeyCombos[row].Text;
-        if (Enum.TryParse<StatKey>(keyStr, out var key) && float.TryParse(_subValueBoxes[row].Text, out float val))
+        string rawKey = StatDisplayNames.FromDisplay(_subKeyCombos[row].Text);
+        if (Enum.TryParse<StatKey>(rawKey, out var key) &&
+            float.TryParse(_subValueBoxes[row].Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float val))
         {
             var (snapped, conf) = TunableRolls.Resolve(key, val);
             if (snapped.HasValue)
             {
                 bool isExact = MathF.Abs(snapped.Value - val) < 0.05f;
-                _subGradeLabels[row].Text = isExact ? "✓ Valid Roll" : $"≈ Snapped: {snapped.Value}";
+                _subGradeLabels[row].Text = isExact ? "✓ Valid Roll" : $"≈ Snap: {snapped.Value}";
                 _subGradeLabels[row].ForeColor = isExact ? AccentGreen : AccentAmber;
             }
             else
@@ -816,17 +837,22 @@ public partial class MainReviewForm : Form
                 _subGradeLabels[row].ForeColor = AccentRed;
             }
         }
+        else
+        {
+            _subGradeLabels[row].Text = "";
+        }
     }
 
     private void SnapSubstat(int row)
     {
-        string keyStr = _subKeyCombos[row].Text;
-        if (Enum.TryParse<StatKey>(keyStr, out var key) && float.TryParse(_subValueBoxes[row].Text, out float val))
+        string rawKey = StatDisplayNames.FromDisplay(_subKeyCombos[row].Text);
+        if (Enum.TryParse<StatKey>(rawKey, out var key) &&
+            float.TryParse(_subValueBoxes[row].Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float val))
         {
             var (snapped, _) = TunableRolls.Resolve(key, val);
             if (snapped.HasValue)
             {
-                _subValueBoxes[row].Text = snapped.Value.ToString("0.0#");
+                _subValueBoxes[row].Text = snapped.Value.ToString("0.0#", CultureInfo.InvariantCulture);
             }
         }
     }
@@ -910,6 +936,11 @@ public partial class MainReviewForm : Form
         else if (e.KeyCode == Keys.Left || (e.Control && e.KeyCode == Keys.A))
         {
             NavigatePrev();
+            e.Handled = true;
+        }
+        else if (e.KeyCode == Keys.Space)
+        {
+            MarkCurrentVerified();
             e.Handled = true;
         }
         else if (e.Control && e.KeyCode == Keys.S)
