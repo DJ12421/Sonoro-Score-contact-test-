@@ -399,10 +399,11 @@ internal class Program
 
             string nameStr  = result.EchoName?.Value as string ?? "?";
             string statStr  = result.MainStatKey?.Value as string ?? "?";
+            string stat2Str = result.SecondMainStatKey?.Value as string ?? "?";
             string conf     = result.EchoName?.Confidence.ToString("F2") ?? "—";
             string icon = result.Errors.Count > 0 ? "x" : result.IsComplete ? "+" : "~";
             Log(result.Errors.Count > 0 ? "WARN" : "OK",
-                $"  [{done,3}/{imageFiles.Length}] {icon} {Path.GetFileName(imgPath)} -> {nameStr} (conf:{conf}) | {statStr} | {result.Substats.Count} substats");
+                $"  [{done,3}/{imageFiles.Length}] {icon} {Path.GetFileName(imgPath)} -> {nameStr} (conf:{conf}) | {statStr} | 2nd:{stat2Str} | {result.Substats.Count} substats");
         }
 
         // ── Summary ─────────────────────────────────────────────────────────
@@ -410,6 +411,7 @@ internal class Program
         int complete   = results.Count(r => r.IsComplete);
         float nameRate = results.Count > 0 ? (float)identified / results.Count : 0;
         float statRate = results.Count > 0 ? (float)results.Count(r => r.MainStatKey?.Value != null) / results.Count : 0;
+        float stat2Rate = results.Count > 0 ? (float)results.Count(r => r.SecondMainStatKey?.Value != null) / results.Count : 0;
         float subAvg   = results.Count > 0 ? (float)results.Average(r => r.Substats.Count) : 0;
         float sonataRate = results.Count > 0 ? (float)results.Count(r => r.Sonata?.Value != null) / results.Count : 0;
         int sonataIcon = results.Count(r => r.Warnings.Any(w => w.StartsWith("Sonata from icon match")));
@@ -425,6 +427,7 @@ internal class Program
             CompleteEchoes     = complete,
             NameDetectionRate  = nameRate,
             MainStatDetectionRate = statRate,
+            SecondMainStatDetectionRate = stat2Rate,
             SubstatAvg         = subAvg,
             Results            = results,
         };
@@ -441,6 +444,7 @@ internal class Program
         Log("INFO", $"  Names identified : {identified} ({nameRate:P0})");
         Log("INFO", $"  Complete echoes  : {complete} ({(results.Count > 0 ? (float)complete / results.Count : 0):P0})");
         Log("INFO", $"  Main stat rate   : {statRate:P0}");
+        Log("INFO", $"  2nd main rate    : {stat2Rate:P0}");
         Log("INFO", $"  Sonata rate      : {sonataRate:P0} (icon:{sonataIcon} ocr:{sonataOcr})");
         Log("INFO", $"  Avg substats     : {subAvg:F1}");
         Log("OK",   $"  Results saved to : {outputPath}");

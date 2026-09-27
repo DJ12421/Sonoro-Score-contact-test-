@@ -11,6 +11,8 @@ namespace SonoroScore.Scanner;
 /// Lossless-ish echo DTO shared by both exporters.
 /// Build via <see cref="FromScanResult"/> (CLI/debugger) or
 /// <c>EchoReviewItem → ExportableEcho</c> mapping in the GUI.
+/// NOTE: the second main stat lives in SS verified JSON only — Tacet-Lab and
+/// GOOD schemas carry a single main stat, so exporters keep the primary.
 /// </summary>
 public sealed record ExportableEcho(
     string Name,

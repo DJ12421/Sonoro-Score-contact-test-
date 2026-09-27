@@ -77,6 +77,7 @@ public class EchoRecognizer
             string levelOcr      = await OcrRegionAsync(panel, EchoRegions.Level,          upscale: true);
             string costOcr       = await OcrRegionAsync(panel, EchoRegions.Cost,           upscale: true);
             string mainStatLine  = await OcrRegionAsync(panel, EchoRegions.MainStatStrip,  upscale: true);
+            string secondMainStatLine = await OcrRegionAsync(panel, EchoRegions.SecondMainStat, upscale: true);
             // Zone B: Sonata Effect region (starts below skill text)
             string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone,     upscale: true);
             // Zone C: Owner strip
@@ -130,6 +131,21 @@ public class EchoRecognizer
 
             if (mainStat == null)
                 errors.Add($"Main stat not parsed from: \"{mainStatLine.Replace('\n', ' ')}\"");
+
+            // ── 7b. Second main stat (own region under the primary strip) ───
+            // Lenient: warns instead of erroring, and stays silent when the
+            // region is empty (not every echo shows a second line).
+            var secondMainStat = StatParser.ParseLine(secondMainStatLine);
+            if (secondMainStat == null && !string.IsNullOrWhiteSpace(secondMainStatLine))
+            {
+                foreach (var line in secondMainStatLine.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    secondMainStat = StatParser.ParseLine(line);
+                    if (secondMainStat != null) break;
+                }
+                if (secondMainStat == null)
+                    warnings.Add($"Second main stat not parsed from: \"{secondMainStatLine.Replace('\n', ' ')}\"");
+            }
 
             // ── 8. Substats (Unified Block with Y-Clustering & Pixel Fallback) ──
             using var substatsBmp = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
@@ -308,9 +324,12 @@ public class EchoRecognizer
                 EquippedBy  = new FieldResult(equippedBy, equippedBy != null ? 0.90f : 0f, ownerZoneOcr.Trim()),
                 MainStatKey   = new FieldResult(mainStat?.Key.ToString(), mainStat != null ? 0.90f : 0f, mainStat?.RawLabel),
                 MainStatValue = new FieldResult(mainStat != null ? (object?)mainStat.Value : null, mainStat != null ? 0.88f : 0f, mainStat?.RawValue),
+                SecondMainStatKey   = new FieldResult(secondMainStat?.Key.ToString(), secondMainStat != null ? 0.90f : 0f, secondMainStat?.RawLabel),
+                SecondMainStatValue = new FieldResult(secondMainStat != null ? (object?)secondMainStat.Value : null, secondMainStat != null ? 0.88f : 0f, secondMainStat?.RawValue),
                 Substats    = substats,
                 RawNameOcr       = nameOcr.Trim(),
                 RawMainStatOcr   = mainStatLine.Trim(),
+                RawSecondMainStatOcr = secondMainStatLine.Trim(),
                 RawSubstatsOcr   = rawSubstatsOcr,
                 RawLevelOcr      = levelOcr.Trim(),
                 RawSonataOcr     = rawSonataOcr,

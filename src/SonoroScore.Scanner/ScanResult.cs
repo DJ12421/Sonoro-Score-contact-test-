@@ -40,11 +40,14 @@ public record EchoScanResult
     public FieldResult?  EquippedBy   { get; init; }
     public FieldResult?  MainStatKey  { get; init; }
     public FieldResult?  MainStatValue{ get; init; }
+    public FieldResult?  SecondMainStatKey  { get; init; }
+    public FieldResult?  SecondMainStatValue{ get; init; }
     public List<SubstatResult> Substats { get; init; } = [];
 
     // ── Debug evidence ─────────────────────────────────────────────────────
     public string? RawNameOcr          { get; init; }
     public string? RawMainStatOcr      { get; init; }
+    public string? RawSecondMainStatOcr{ get; init; }
     public string? RawSubstatsOcr      { get; init; }
     public string? RawLevelOcr         { get; init; }
     public string? RawSonataOcr        { get; init; }
@@ -71,6 +74,7 @@ public record ScanSessionResult
     public int CompleteEchoes          { get; init; }
     public float NameDetectionRate     { get; init; }
     public float MainStatDetectionRate { get; init; }
+    public float SecondMainStatDetectionRate { get; init; }
     public float SubstatAvg            { get; init; }
     public required List<EchoScanResult> Results { get; init; }
 }

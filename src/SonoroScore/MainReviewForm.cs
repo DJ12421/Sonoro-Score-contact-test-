@@ -51,6 +51,8 @@ public partial class MainReviewForm : Form
     private ComboBox _sonataCombo = null!;
     private ComboBox _mainStatKeyCombo = null!;
     private TextBox _mainStatValueBox = null!;
+    private ComboBox _secondMainStatKeyCombo = null!;
+    private TextBox _secondMainStatValueBox = null!;
     private Label _nameConfLabel = null!;
 
     // Substats Controls (5 rows)
@@ -125,6 +127,8 @@ public partial class MainReviewForm : Form
         string[] statDisplays = StatDisplayNames.AllDisplayNames;
         _mainStatKeyCombo.Items.Clear();
         _mainStatKeyCombo.Items.AddRange(statDisplays);
+        _secondMainStatKeyCombo.Items.Clear();
+        _secondMainStatKeyCombo.Items.AddRange(statDisplays);
 
         for (int i = 0; i < 5; i++)
         {
@@ -444,16 +448,22 @@ public partial class MainReviewForm : Form
         AddLabeledControl(idGroup, "Sonata:", _sonataCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList }, 4);
         _sonataCombo.SelectedIndexChanged += (s, e) => OnFieldChanged();
 
-        // Group 2: Main Stat Card
+        // Group 2: Main Stat Card (primary + second line)
         var mainGroup = CreateCardGroup("Main Stat");
         mainGroup.Dock = DockStyle.Top;
-        mainGroup.Height = 95;
+        mainGroup.Height = 150;
 
         AddLabeledControl(mainGroup, "Stat:", _mainStatKeyCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList }, 0);
         _mainStatKeyCombo.SelectedIndexChanged += (s, e) => OnFieldChanged();
 
         AddLabeledControl(mainGroup, "Value:", _mainStatValueBox = new TextBox(), 1);
         _mainStatValueBox.TextChanged += (s, e) => OnFieldChanged();
+
+        AddLabeledControl(mainGroup, "2nd Stat:", _secondMainStatKeyCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList }, 2);
+        _secondMainStatKeyCombo.SelectedIndexChanged += (s, e) => OnFieldChanged();
+
+        AddLabeledControl(mainGroup, "2nd Value:", _secondMainStatValueBox = new TextBox(), 3);
+        _secondMainStatValueBox.TextChanged += (s, e) => OnFieldChanged();
 
         // Group 3: Substats Card (5 rows in strict top-to-bottom #1 to #5 order)
         var subGroup = CreateCardGroup("Substats (Tuned Rolls)");
@@ -747,6 +757,7 @@ public partial class MainReviewForm : Form
                 i.Level,
                 i.Sonata,
                 MainStat = new { Key = i.MainStatKey, Display = StatDisplayNames.ToDisplay(i.MainStatKey), Value = i.MainStatValue },
+                SecondMainStat = new { Key = i.SecondMainStatKey, Display = StatDisplayNames.ToDisplay(i.SecondMainStatKey), Value = i.SecondMainStatValue },
                 Substats = i.Substats.Where(s => s.IsActive).Select(s => new { Key = s.StatKey, Display = StatDisplayNames.ToDisplay(s.StatKey), Value = s.Value, s.SnappedValue }).ToList(),
                 i.IsVerified,
                 i.IsEdited
@@ -913,6 +924,8 @@ public partial class MainReviewForm : Form
             // Bind Main Stat (convert enum key like "CritRate" to display like "Crit. Rate")
             _mainStatKeyCombo.Text = StatDisplayNames.ToDisplay(item.MainStatKey);
             _mainStatValueBox.Text = item.MainStatValue > 0 ? item.MainStatValue.ToString("0.0#", CultureInfo.InvariantCulture) : "";
+            _secondMainStatKeyCombo.Text = StatDisplayNames.ToDisplay(item.SecondMainStatKey);
+            _secondMainStatValueBox.Text = item.SecondMainStatValue > 0 ? item.SecondMainStatValue.ToString("0.0#", CultureInfo.InvariantCulture) : "";
 
             // Bind Substats
             for (int i = 0; i < 5; i++)
@@ -992,6 +1005,9 @@ public partial class MainReviewForm : Form
         item.MainStatKey = StatDisplayNames.FromDisplay(_mainStatKeyCombo.Text);
         if (float.TryParse(_mainStatValueBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float mv))
             item.MainStatValue = mv;
+        item.SecondMainStatKey = StatDisplayNames.FromDisplay(_secondMainStatKeyCombo.Text);
+        if (float.TryParse(_secondMainStatValueBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float mv2))
+            item.SecondMainStatValue = mv2;
 
         for (int i = 0; i < 5; i++)
         {
@@ -1151,6 +1167,8 @@ public partial class MainReviewForm : Form
         _sonataCombo.SelectedIndex = -1;
         _mainStatKeyCombo.SelectedIndex = -1;
         _mainStatValueBox.Text = "";
+        _secondMainStatKeyCombo.SelectedIndex = -1;
+        _secondMainStatValueBox.Text = "";
         _screenshotBox.Image = null;
         for (int i = 0; i < 5; i++)
         {

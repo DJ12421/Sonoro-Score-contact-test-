@@ -81,6 +81,8 @@ public class EchoReviewItem
     public string EquippedBy { get; set; } = "";
     public string MainStatKey { get; set; } = "";
     public float MainStatValue { get; set; }
+    public string SecondMainStatKey { get; set; } = "";
+    public float SecondMainStatValue { get; set; }
 
     public List<EditableSubstat> Substats { get; set; } = [];
 
@@ -171,6 +173,8 @@ public class EchoReviewItem
         string equipped = ExtractString(scan.EquippedBy?.Value, "");
         string mainKey = ExtractString(scan.MainStatKey?.Value, "");
         float mainVal = ExtractFloat(scan.MainStatValue?.Value, 0f);
+        string secondMainKey = ExtractString(scan.SecondMainStatKey?.Value, "");
+        float secondMainVal = ExtractFloat(scan.SecondMainStatValue?.Value, 0f);
 
         var item = new EchoReviewItem
         {
@@ -183,6 +187,8 @@ public class EchoReviewItem
             EquippedBy      = equipped,
             MainStatKey     = mainKey,
             MainStatValue   = mainVal,
+            SecondMainStatKey   = secondMainKey,
+            SecondMainStatValue = secondMainVal,
             NameConfidence  = scan.EchoName?.Confidence ?? 0f,
             RawNameOcr      = scan.RawNameOcr ?? "",
             RawMainStatOcr  = scan.RawMainStatOcr ?? "",

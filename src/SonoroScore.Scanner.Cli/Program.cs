@@ -129,6 +129,8 @@ internal class Program
             string name = scan.EchoName?.Value as string ?? "UNKNOWN";
             string stat = scan.MainStatKey?.Value as string ?? "UNKNOWN";
             object? val = scan.MainStatValue?.Value;
+            string stat2 = scan.SecondMainStatKey?.Value as string ?? "—";
+            object? val2 = scan.SecondMainStatValue?.Value;
             string sonata = scan.Sonata?.Value as string ?? "UNKNOWN";
             string conf = scan.EchoName?.Confidence.ToString("F2") ?? "0.00";
             int subs = scan.Substats.Count;
@@ -144,7 +146,7 @@ internal class Program
             Console.ForegroundColor = color;
             Console.Write($"[{idx,3}/{images.Length}] [{status,-7}] ");
             Console.ResetColor();
-            Console.WriteLine($"{Path.GetFileName(imgPath)} -> {name} | Sonata: {sonata} | Main: {stat} {val} | Subs: {subs}");
+            Console.WriteLine($"{Path.GetFileName(imgPath)} -> {name} | Sonata: {sonata} | Main: {stat} {val} | Main2: {stat2} {val2} | Subs: {subs}");
         }
 
         stopwatch.Stop();
@@ -153,6 +155,7 @@ internal class Program
         int total = results.Count;
         int namesFound = results.Count(r => r.EchoName?.Value != null);
         int statsFound = results.Count(r => r.MainStatKey?.Value != null);
+        int stats2Found = results.Count(r => r.SecondMainStatKey?.Value != null);
         int sonatasFound = results.Count(r => r.Sonata?.Value != null);
         int complete = results.Count(r => r.IsComplete);
         float avgSubs = total > 0 ? (float)results.Average(r => r.Substats.Count) : 0;
@@ -165,6 +168,7 @@ internal class Program
         Console.WriteLine($"  Elapsed time            : {stopwatch.Elapsed.TotalSeconds:F2}s ({(stopwatch.Elapsed.TotalMilliseconds / Math.Max(1, total)):F0}ms/image)");
         Console.WriteLine($"  Echo names identified   : {namesFound}/{total} ({((float)namesFound / total):P1})");
         Console.WriteLine($"  Main stats detected     : {statsFound}/{total} ({((float)statsFound / total):P1})");
+        Console.WriteLine($"  2nd main stats found  : {stats2Found}/{total} ({((float)stats2Found / total):P1})");
         Console.WriteLine($"  Sonata sets detected    : {sonatasFound}/{total} ({((float)sonatasFound / total):P1})");
         Console.WriteLine($"  Fully complete echoes   : {complete}/{total} ({((float)complete / total):P1})");
         Console.WriteLine($"  Average substats / echo : {avgSubs:F2}");
@@ -186,6 +190,7 @@ internal class Program
             CompleteEchoes = complete,
             NameDetectionRate = (float)namesFound / total,
             MainStatDetectionRate = (float)statsFound / total,
+            SecondMainStatDetectionRate = (float)stats2Found / total,
             SubstatAvg = avgSubs,
             Results = results
         };
