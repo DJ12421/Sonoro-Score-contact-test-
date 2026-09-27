@@ -163,10 +163,11 @@ public partial class MainReviewForm : Form
         var rescanBtn     = new ToolStripButton("⚡ Re-Scan Current", null, async (s, e) => await RescanCurrentAsync()) { ForeColor = AccentAmber };
         var tacetBtn      = new ToolStripButton("⬆ Tacet-Lab", null, async (s, e) => await ExportTacetLabAsync()) { ForeColor = FgPrimary, ToolTipText = "1-click export verified echoes to tacet-lab-backup.json" };
         var goodBtn       = new ToolStripButton("⬆ GOOD", null, async (s, e) => await ExportGoodAsync()) { ForeColor = FgPrimary, ToolTipText = "1-click export verified echoes to GOOD format (best-effort bridge)" };
+        var areasBtn      = new ToolStripButton("◈ Areas", null, (s, e) => OpenRegionConfig()) { ForeColor = FgPrimary, ToolTipText = "Visual scan-area config: drag region boxes over the current echo panel" };
 
         _sessionInfoLabel = new ToolStripLabel("No session loaded") { ForeColor = FgSecondary, Alignment = ToolStripItemAlignment.Right };
 
-        toolStrip.Items.AddRange([openFolderBtn, openJsonBtn, new ToolStripSeparator(), saveJsonBtn, new ToolStripSeparator(), rescanBtn, new ToolStripSeparator(), tacetBtn, goodBtn, _sessionInfoLabel]);
+        toolStrip.Items.AddRange([openFolderBtn, openJsonBtn, new ToolStripSeparator(), saveJsonBtn, new ToolStripSeparator(), rescanBtn, new ToolStripSeparator(), tacetBtn, goodBtn, new ToolStripSeparator(), areasBtn, _sessionInfoLabel]);
 
         // 2. Status Bar
         var statusStrip = new StatusStrip { BackColor = BgCard, ForeColor = FgSecondary };
@@ -1018,6 +1019,38 @@ public partial class MainReviewForm : Form
 
         LoadItem(updated);
         _statusLabel.Text = $"Re-scan complete for {item.ImageFileName}.";
+    }
+
+    private void OpenRegionConfig()
+    {
+        if (_currentIndex < 0 || _currentIndex >= _filteredItems.Count)
+        {
+            MessageBox.Show("Load a session first — the area config needs a sample echo panel.",
+                "No Sample", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var item = _filteredItems[_currentIndex];
+        if (!File.Exists(item.ImagePath))
+        {
+            MessageBox.Show($"Sample image not found:\n{item.ImagePath}",
+                "No Sample", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            using var full = new Bitmap(item.ImagePath);
+            using var panel = EchoRegions.ExtractPanel(full);
+            using var dlg = new RegionConfigDialog(panel);
+            dlg.ShowDialog(this);
+            _statusLabel.Text = EchoRegions.HasOverrides
+                ? $"Area overrides active ({EchoRegions.OverrideFileName}). Re-scan to apply."
+                : "Area config: compiled defaults in effect.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Cannot open area config: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void MarkCurrentVerified()

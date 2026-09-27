@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Text.Json;
 
 namespace SonoroScore.Scanner;
 
@@ -8,6 +9,11 @@ namespace SonoroScore.Scanner;
 /// as shown in the Echo Picker (Character Menu / echo-detail layout).
 /// Coordinates are panel-relative (the panel is the cropped right-side strip).
 /// Ported from Tacet-Lab regions.ts CHARACTER_MENU_REGIONS + DEFAULT_PANEL_RECTS.
+///
+/// Runtime overrides: the SS area-config dialog saves user edits to
+/// <c>regions.override.json</c> next to the exe; values present there win over
+/// the compiled defaults below. Delete the file (or Reset in the dialog) to
+/// restore defaults.
 /// </summary>
 public static class EchoRegions
 {
@@ -17,41 +23,161 @@ public static class EchoRegions
     public const float PanelW = 0.1882f;
     public const float PanelH = 0.7792f;
 
-    // Panel-relative regions (x, y, w, h all in [0,1] relative to panel crop)
+    public const string OverrideFileName = "regions.override.json";
+
+    // ── Compiled defaults ─────────────────────────────────────────────────
     // Calibrated via probe on 1920x1080 capture → panel 361x841px
     //   Echo Skill header  → y ≈ 0.43  (364px)
     //   Sonata Effect hdr  → y ≈ 0.67  (560px)
     //   Equipped by text   → y ≈ 0.97+ (>816px)
-    public static readonly RectangleF EchoName        = new(0f,        0f,      0.770f,  0.061f);
-    public static readonly RectangleF Level           = new(0.776f,    0.018f,  0.119f,  0.037f);
-    public static readonly RectangleF Cost            = new(0.018f,    0.065f,  0.241f,  0.031f);
-    
-    // Unified Main Stat strip (captures both label and value in one line, e.g. "Crit. Rate 22.0%")
-    public static readonly RectangleF MainStatStrip   = new(0.080f,    0.110f,  0.900f,  0.055f);
-    
-    // Substats 2-column crops — trimmed to y=0.20..0.42 to stop before "Echo Skill" header
-    public static readonly RectangleF SubstatsLabels  = new(0.080f,    0.200f,  0.650f,  0.220f);
-    public static readonly RectangleF SubstatsValues  = new(0.730f,    0.200f,  0.250f,  0.220f);
+    private static readonly Dictionary<string, RectangleF> _defaults = new()
+    {
+        ["EchoName"]      = new(0f,        0f,      0.770f,  0.061f),
+        ["Level"]         = new(0.776f,    0.018f,  0.119f,  0.037f),
+        ["Cost"]          = new(0.018f,    0.065f,  0.241f,  0.031f),
+        ["MainStatStrip"] = new(0.080f,    0.110f,  0.900f,  0.055f),
+        ["SubstatsBlock"] = new(0.040f,    0.195f,  0.920f,  0.225f),
+        ["RarityBand"]    = new(0.003f,    0.016f,  0.320f,  0.042f),
+        // Sonata icon to the right of the "Sonata Effect" heading.
+        // From Tacet-Lab regions.ts: x=0.88, y=0.008, w=0.115, h=0.065 (panel-relative).
+        ["SonataIcon"]    = new(0.88f,     0.008f,  0.115f,  0.065f),
+        // Zone B: Echo Skill + Sonata Effect (y=0.44..0.94, handles 1-line and
+        // multi-line Echo Skill descriptions across Cost 1/3/4 echoes).
+        ["SonataZone"]    = new(0.000f,    0.440f,  1.000f,  0.500f),
+        // Zone C: "Equipped by [Character]" footer strip.
+        ["OwnerZone"]     = new(0.000f,    0.940f,  1.000f,  0.060f),
+    };
 
-    // Substats unified block (width covers labels and values without splitting columns)
-    public static readonly RectangleF SubstatsBlock   = new(0.040f,    0.195f,  0.920f,  0.225f);
+    /// <summary>Editable region names in stable display order (the "all nine").</summary>
+    public static readonly string[] RegionNames =
+        ["EchoName", "Level", "Cost", "MainStatStrip", "SubstatsBlock",
+         "RarityBand", "SonataIcon", "SonataZone", "OwnerZone"];
 
-    // Rarity band (used for hue-based pixel classification)
-    public static readonly RectangleF RarityBand      = new(0.003f,    0.016f,  0.320f,  0.042f);
+    private static readonly object _lock = new();
+    private static Dictionary<string, RectangleF>? _overrides;
 
-    // ── Sonata icon (visual signature match) ────────────────────────────────
-    // Icon to the right of the "Sonata Effect" heading.
-    // From Tacet-Lab regions.ts: x=0.88, y=0.008, w=0.115, h=0.065 (panel-relative).
-    public static readonly RectangleF SonataIcon      = new(0.88f,     0.008f,  0.115f,  0.065f);
+    static EchoRegions() { Reload(); }
 
-    // ── Zone B: Echo Skill + Sonata Effect ──────────────────────────────────
-    // Starts right after SubstatsBlock (y=0.44) down to y=0.94.
-    // Handles both 1-line and multi-line Echo Skill descriptions across Cost 1/3/4 echoes.
-    public static readonly RectangleF SonataZone      = new(0.000f,    0.440f,  1.000f,  0.500f);
+    // ── Public accessors (override wins over default) ─────────────────────
+    public static RectangleF EchoName      => Get("EchoName");
+    public static RectangleF Level         => Get("Level");
+    public static RectangleF Cost          => Get("Cost");
+    public static RectangleF MainStatStrip => Get("MainStatStrip");
+    public static RectangleF SubstatsBlock => Get("SubstatsBlock");
+    public static RectangleF RarityBand    => Get("RarityBand");
+    public static RectangleF SonataIcon    => Get("SonataIcon");
+    public static RectangleF SonataZone    => Get("SonataZone");
+    public static RectangleF OwnerZone     => Get("OwnerZone");
 
-    // ── Zone C: Owner strip ─────────────────────────────────────────────────
-    // "Equipped by [Character]" footer text
-    public static readonly RectangleF OwnerZone       = new(0.000f,    0.940f,  1.000f,  0.060f);
+    // Legacy 2-column substat crops (kept, not editable — pipeline uses SubstatsBlock).
+    public static RectangleF SubstatsLabels => new(0.080f, 0.200f, 0.650f, 0.220f);
+    public static RectangleF SubstatsValues => new(0.730f, 0.200f, 0.250f, 0.220f);
+
+    private static RectangleF Get(string name)
+    {
+        lock (_lock)
+        {
+            if (_overrides != null && _overrides.TryGetValue(name, out var o))
+                return o;
+            return _defaults[name];
+        }
+    }
+
+    /// <summary>Snapshot of effective regions (override merged over defaults).</summary>
+    public static Dictionary<string, RectangleF> Snapshot()
+    {
+        lock (_lock)
+        {
+            var snap = new Dictionary<string, RectangleF>(_defaults);
+            if (_overrides != null)
+                foreach (var (k, v) in _overrides)
+                    if (snap.ContainsKey(k)) snap[k] = v;
+            return snap;
+        }
+    }
+
+    public static bool HasOverrides
+    {
+        get { lock (_lock) { return _overrides is { Count: > 0 }; } }
+    }
+
+    public static string OverridePath
+        => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, OverrideFileName);
+
+    /// <summary>(Re)load overrides from disk. Invalid entries fall back to defaults.</summary>
+    public static void Reload(string? path = null)
+    {
+        lock (_lock)
+        {
+            _overrides = null;
+            string file = path ?? OverridePath;
+            if (!File.Exists(file)) return;
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                var loaded = new Dictionary<string, RectangleF>();
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (!_defaults.ContainsKey(prop.Name)) continue;
+                    if (TryParseRect(prop.Value, out var r)) loaded[prop.Name] = r;
+                }
+                if (loaded.Count > 0) _overrides = loaded;
+            }
+            catch { /* corrupt file → defaults */ }
+        }
+    }
+
+    /// <summary>Persist edited regions (relative L/T/R/B) as the override file.</summary>
+    public static void SaveOverrides(IReadOnlyDictionary<string, RectangleF> regions, string? path = null)
+    {
+        var clean = new Dictionary<string, object>();
+        foreach (var name in RegionNames)
+        {
+            if (!regions.TryGetValue(name, out var r)) r = _defaults[name];
+            r = Clamp(r);
+            clean[name] = new { x = r.X, y = r.Y, w = r.Width, h = r.Height };
+        }
+        File.WriteAllText(path ?? OverridePath,
+            JsonSerializer.Serialize(clean, new JsonSerializerOptions { WriteIndented = true }));
+        Reload(path);
+    }
+
+    /// <summary>Delete the override file and restore compiled defaults.</summary>
+    public static void ResetOverrides(string? path = null)
+    {
+        try
+        {
+            string file = path ?? OverridePath;
+            if (File.Exists(file)) File.Delete(file);
+        }
+        catch { }
+        Reload(path);
+    }
+
+    private static bool TryParseRect(JsonElement el, out RectangleF r)
+    {
+        r = default;
+        try
+        {
+            float x = (float)el.GetProperty("x").GetDouble();
+            float y = (float)el.GetProperty("y").GetDouble();
+            float w = (float)el.GetProperty("w").GetDouble();
+            float h = (float)el.GetProperty("h").GetDouble();
+            if (w <= 0.001f || h <= 0.001f) return false;
+            r = Clamp(new RectangleF(x, y, w, h));
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private static RectangleF Clamp(RectangleF r)
+    {
+        float x = Math.Clamp(r.X, 0f, 1f);
+        float y = Math.Clamp(r.Y, 0f, 1f);
+        float w = Math.Clamp(r.Width, 0.005f, 1f - x);
+        float h = Math.Clamp(r.Height, 0.005f, 1f - y);
+        return new RectangleF(x, y, w, h);
+    }
 
     /// <summary>
     /// Convert a panel-relative RectangleF to absolute pixel coordinates
@@ -86,9 +212,6 @@ public static class EchoRegions
     /// </summary>
     public static Bitmap ExtractPanel(Bitmap frame)
     {
-        var panelRect = new RectangleF(
-            PanelX * frame.Width,  PanelY * frame.Height,
-            PanelW * frame.Width,  PanelH * frame.Height);
         return CropRegion(frame, new RectangleF(PanelX, PanelY, PanelW, PanelH));
     }
 }
