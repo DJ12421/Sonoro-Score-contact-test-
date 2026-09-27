@@ -36,8 +36,15 @@ public static class EchoRegions
         ["Level"]         = new(0.776f,    0.018f,  0.119f,  0.037f),
         ["Cost"]          = new(0.018f,    0.065f,  0.241f,  0.031f),
         ["MainStatStrip"] = new(0.080f,    0.110f,  0.900f,  0.055f),
-        ["SubstatsBlock"] = new(0.040f,    0.195f,  0.920f,  0.225f),
-        ["RarityBand"]    = new(0.003f,    0.016f,  0.320f,  0.042f),
+        // Second main-stat line under the primary strip (placeholder — user calibrates).
+        ["SecondMainStat"] = new(0.080f,   0.160f,  0.900f,  0.035f),
+        // Five substat slots: placeholders splitting the old unified block
+        // (0.040, 0.195, 0.920, 0.225). User calibrates each; SubstatsBlock follows.
+        ["Substat1"]      = new(0.040f,    0.195f,  0.920f,  0.045f),
+        ["Substat2"]      = new(0.040f,    0.240f,  0.920f,  0.045f),
+        ["Substat3"]      = new(0.040f,    0.285f,  0.920f,  0.045f),
+        ["Substat4"]      = new(0.040f,    0.330f,  0.920f,  0.045f),
+        ["Substat5"]      = new(0.040f,    0.375f,  0.920f,  0.045f),
         // Sonata icon to the right of the "Sonata Effect" heading.
         // From Tacet-Lab regions.ts: x=0.88, y=0.008, w=0.115, h=0.065 (panel-relative).
         ["SonataIcon"]    = new(0.88f,     0.008f,  0.115f,  0.065f),
@@ -48,10 +55,11 @@ public static class EchoRegions
         ["OwnerZone"]     = new(0.000f,    0.940f,  1.000f,  0.060f),
     };
 
-    /// <summary>Editable region names in stable display order (the "all nine").</summary>
+    /// <summary>Editable region names in stable display order.</summary>
     public static readonly string[] RegionNames =
-        ["EchoName", "Level", "Cost", "MainStatStrip", "SubstatsBlock",
-         "RarityBand", "SonataIcon", "SonataZone", "OwnerZone"];
+        ["EchoName", "Level", "Cost", "MainStatStrip", "SecondMainStat",
+         "Substat1", "Substat2", "Substat3", "Substat4", "Substat5",
+         "SonataIcon", "SonataZone", "OwnerZone"];
 
     private static readonly object _lock = new();
     private static Dictionary<string, RectangleF>? _overrides;
@@ -59,15 +67,40 @@ public static class EchoRegions
     static EchoRegions() { Reload(); }
 
     // ── Public accessors (override wins over default) ─────────────────────
-    public static RectangleF EchoName      => Get("EchoName");
-    public static RectangleF Level         => Get("Level");
-    public static RectangleF Cost          => Get("Cost");
-    public static RectangleF MainStatStrip => Get("MainStatStrip");
-    public static RectangleF SubstatsBlock => Get("SubstatsBlock");
-    public static RectangleF RarityBand    => Get("RarityBand");
-    public static RectangleF SonataIcon    => Get("SonataIcon");
-    public static RectangleF SonataZone    => Get("SonataZone");
-    public static RectangleF OwnerZone     => Get("OwnerZone");
+    public static RectangleF EchoName       => Get("EchoName");
+    public static RectangleF Level          => Get("Level");
+    public static RectangleF Cost           => Get("Cost");
+    public static RectangleF MainStatStrip  => Get("MainStatStrip");
+    public static RectangleF SecondMainStat => Get("SecondMainStat");
+    public static RectangleF Substat1       => Get("Substat1");
+    public static RectangleF Substat2       => Get("Substat2");
+    public static RectangleF Substat3       => Get("Substat3");
+    public static RectangleF Substat4       => Get("Substat4");
+    public static RectangleF Substat5       => Get("Substat5");
+    public static RectangleF SonataIcon     => Get("SonataIcon");
+    public static RectangleF SonataZone     => Get("SonataZone");
+    public static RectangleF OwnerZone      => Get("OwnerZone");
+
+    /// <summary>
+    /// Unified substat block = bounding union of the five slots.
+    /// The pipeline (Y-clustering + HP pixel fallback) keeps using this, so
+    /// tuning the slots automatically moves the block.
+    /// </summary>
+    public static RectangleF SubstatsBlock
+    {
+        get
+        {
+            float l = Math.Min(Substat1.X, Math.Min(Substat2.X, Math.Min(Substat3.X, Math.Min(Substat4.X, Substat5.X))));
+            float t = Math.Min(Substat1.Y, Math.Min(Substat2.Y, Math.Min(Substat3.Y, Math.Min(Substat4.Y, Substat5.Y))));
+            float r = Math.Max(Substat1.Right, Math.Max(Substat2.Right, Math.Max(Substat3.Right, Math.Max(Substat4.Right, Substat5.Right))));
+            float b = Math.Max(Substat1.Bottom, Math.Max(Substat2.Bottom, Math.Max(Substat3.Bottom, Math.Max(Substat4.Bottom, Substat5.Bottom))));
+            return new RectangleF(l, t, r - l, b - t);
+        }
+    }
+
+    // Rarity is color-only in WuWa (no text region) — fixed pixel band for the
+    // hue classifier. Not editable, not overridable.
+    public static RectangleF RarityBand => new(0.003f, 0.016f, 0.320f, 0.042f);
 
     // Legacy 2-column substat crops (kept, not editable — pipeline uses SubstatsBlock).
     public static RectangleF SubstatsLabels => new(0.080f, 0.200f, 0.650f, 0.220f);

@@ -20,7 +20,7 @@ public sealed class RegionConfigDialog : Form
 {
     private readonly Bitmap _panel;
     private Dictionary<string, RectangleF> _working = new();
-    private string _selected = "SubstatsBlock";
+    private string _selected = "Substat1";
     private bool _syncing;
 
     // Drag state (relative units)
