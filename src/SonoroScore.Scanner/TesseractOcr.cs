@@ -39,13 +39,24 @@ public static class TesseractOcr
     private static TesseractEngine Engine => _engine.Value;
 
     /// <summary>
+    /// Convert a GDI bitmap to a Leptonica Pix via an in-memory PNG
+    /// (Tesseract 5.2.0 has no PixConverter; Pix.LoadFromMemory is the bridge).
+    /// </summary>
+    private static Pix ToPix(Bitmap bmp)
+    {
+        using var ms = new MemoryStream();
+        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+        return Pix.LoadFromMemory(ms.ToArray());
+    }
+
+    /// <summary>
     /// Run OCR on the given bitmap and return the extracted plain text.
     /// </summary>
     public static async Task<string> RecognizeAsync(Bitmap bmp)
     {
         return await Task.Run(() =>
         {
-            using var pix = PixConverter.ToPix(bmp);
+            using var pix = ToPix(bmp);
             using var page = Engine.Process(pix);
             return page.GetText();
         });
@@ -60,14 +71,13 @@ public static class TesseractOcr
         return await Task.Run(() =>
         {
             var result = new List<OcrLineInfo>();
-            using var pix = PixConverter.ToPix(bmp);
+            using var pix = ToPix(bmp);
             using var page = Engine.Process(pix);
             using var iter = page.GetIterator();
             if (iter == null) return result;
 
-            // Iterate over each text line.
-            // PageIterator.Next(PageIteratorLevel) is the only valid overload in
-            // the Tesseract 5.x .NET binding. IsAtBeginningOf guards the first row.
+            // Iterate over each text line. IsAtBeginningOf guards the first row
+            // (ResultIterator starts before the first element in 5.x bindings).
             do
             {
                 if (iter.IsAtBeginningOf(PageIteratorLevel.TextLine))
@@ -75,9 +85,12 @@ public static class TesseractOcr
                     var text = iter.GetText(PageIteratorLevel.TextLine);
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        iter.TryGetBoundingBox(PageIteratorLevel.TextLine,
-                            out int x1, out int y1, out int x2, out int y2);
-                        result.Add(new OcrLineInfo(text.Trim(), y1, x1, x2 - x1, y2 - y1));
+                        double x = 0, y = 0, w = 0, h = 0;
+                        if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out Tesseract.Rect box))
+                        {
+                            x = box.X1; y = box.Y1; w = box.Width; h = box.Height;
+                        }
+                        result.Add(new OcrLineInfo(text.Trim(), y, x, w, h));
                     }
                 }
             } while (iter.Next(PageIteratorLevel.TextLine));
