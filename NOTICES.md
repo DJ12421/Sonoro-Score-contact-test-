@@ -28,6 +28,15 @@ Portions adapted from Tacet-Lab (GPL-3.0):
 - Tacet-Lab backup envelope (`src/storage/database.ts` `exportAccount`,
   `src/domain/types.ts` `AccountDocument`, `src/game-data/core.ts`
   `GAME_DATA_VERSION`) mirrored by `TacetLabExporter.cs`.
+- Field preprocessing (`src/scanner/preprocess.worker.ts`: percentile
+  normalization, polarity correction, Otsu threshold, per-strategy cleanups)
+  and OCR engine parameters (`src/scanner/ocr-pool.ts`: LSTM-only, DPI 300,
+  whitelists, per-kind PSM) mirrored by `EchoFieldPreprocessor.cs` and the
+  `TesseractOcr` engine configuration. Adaptive-threshold and morphological
+  helpers in their worker are never called there — deliberately not ported.
+- Fixture/accuracy methodology (`docs/ocr-fixtures.md` sidecar shape,
+  `src/scanner/accuracy.ts` field-counting rule) mirrored by `EchoFixture` /
+  `EchoAccuracy.cs` and the `english-1080p` fixture corpus.
 
 Files carrying adapted code are marked with a header comment crediting Tacet-Lab
 (GPL-3.0). See NOTICES.md.

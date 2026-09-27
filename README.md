@@ -267,8 +267,9 @@ dotnet publish src/AlephalSonata/AlephalSonata.csproj -c Release -r win-x64 --se
 - [x] Discrete substat roll-table snapping
 - [x] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format (`sonoro-good.json`)
 - [x] Calibration re-run on `publish/AlephalSonata/aleph_images` (300-image corpus, 2026-09-28):
-  names 92.0% · main 91.0% · 2nd main 83.3% · sonata 100% (icon match) ·
-  complete 25.0% · 2.29 substats/echo — see `TODO.md` for the A/B table
+  names 99.7% · main 99.0% · 2nd main 98.7% · sonata 100% (icon match) ·
+  complete 35.3% · 2.54 substats/echo — see `TODO.md` for the A/B table.
+  `dotnet test` (25-fixture 1080p corpus + unit tests) green.
 
 ---
 

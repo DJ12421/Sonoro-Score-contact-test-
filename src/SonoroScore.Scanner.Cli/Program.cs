@@ -47,6 +47,7 @@ internal class Program
             else if (args[i] == "--signature-url" && i + 1 < args.Length) signatureUrl = args[++i];
             else if (args[i] == "--diag-tess") return await DiagTesseract();
             else if (args[i] == "--dump-lines" && i + 1 < args.Length) return await DumpLines(args[++i]);
+            else if (args[i] == "--dump-panel" && i + 2 < args.Length) return DumpPanel(args[++i], args[++i]);
         }
 
         // Default test suite location
@@ -278,6 +279,22 @@ internal class Program
             .Where(m => m.ModuleName.Contains("tesseract", StringComparison.OrdinalIgnoreCase)
                      || m.ModuleName.Contains("leptonica", StringComparison.OrdinalIgnoreCase)))
             Console.WriteLine($"native: {mod.ModuleName} <- {mod.FileName}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Hidden diagnostic: write the pipeline's own panel crop for byte-compare
+    /// against externally cropped fixture panels.
+    /// </summary>
+    static int DumpPanel(string fullPng, string outPng)
+    {
+        if (!File.Exists(fullPng)) { Console.WriteLine($"Not found: {fullPng}"); return 1; }
+        using var full = new System.Drawing.Bitmap(fullPng);
+        Console.WriteLine($"full={full.Width}x{full.Height}");
+        using var panel = EchoRegions.ExtractPanel(full);
+        Console.WriteLine($"panel={panel.Width}x{panel.Height}");
+        panel.Save(outPng, System.Drawing.Imaging.ImageFormat.Png);
+        Console.WriteLine($"wrote {outPng}");
         return 0;
     }
 

@@ -77,10 +77,20 @@ public static class EchoRegions
     public static RectangleF SonataZone     => Get("SonataZone");
     public static RectangleF OwnerZone      => Get("OwnerZone");
 
+    /// <summary>Substat slot by 1-based index (clamped); feeds Y-position slotting.</summary>
+    public static RectangleF SubstatSlot(int index) => index switch
+    {
+        1 => Substat1,
+        2 => Substat2,
+        3 => Substat3,
+        4 => Substat4,
+        5 => Substat5,
+        _ => SubstatsBlock,
+    };
+
     /// <summary>
     /// Unified substat block = bounding union of the five slots.
-    /// The pipeline (Y-clustering + HP pixel fallback) keeps using this, so
-    /// tuning the slots automatically moves the block.
+    /// Tuning the slots automatically moves the block.
     /// </summary>
     public static RectangleF SubstatsBlock
     {

@@ -8,9 +8,12 @@
 > sets; everything below only carries over the 1080p side of that until 1440p is explicitly picked
 > back up. Don't add 1440p fixtures or resolution-branching logic as part of this TODO.
 >
-> **Status (2026-09-28):** Priority 1 + 2 implemented (uncommitted working tree). Priority 3
-> thresholds codified in `ScannerConfig.cs`; re-run pending (no .NET SDK on PATH). Priority 4 +
-> export done in code, pending test run. Accuracy work (§5–§9 below) not yet started.
+> **Status (2026-09-28):** P1–P4 done and committed. §5 done (field preprocessing
+> port + hybrid routing; corpus: names 99.7%, mains 99.0%, 2nd-main 98.7%,
+> sonata 100% icon, complete 35.3%, 2.54 subs/echo). §6 harness + 25 bootstrapped
+> (unverified) fixtures done, `dotnet test` green. §7 done except row-level gap
+> analysis. §8 parked (needs live game). Hand-verification of the 25 fixtures
+> (flipping `verified` to true) is open owner labor.
 
 ---
 
@@ -267,13 +270,13 @@ preprocessing shape documented in [`../Tacet-Lab/docs/architecture.md`](../Tacet
 **Goal: stop eyeballing "97.7%" from one ad-hoc CLI run; port
 [`../Tacet-Lab/docs/ocr-fixtures.md`](../Tacet-Lab/docs/ocr-fixtures.md)'s protocol, 1080p slice only.**
 
-- [ ] Create `tests/fixtures/echoes/english-1080p/` under the scanner test project. (No 1440p folder for now — out of scope, see header note.)
-- [ ] Define a C# sidecar record type mirroring §2e's JSON shape: `panelRect`, `fieldRects` (normalized 0–1, panel-relative), plus full expected parse (`name, cost, rarity, level, sonata, mainStat, subStats[]`).
-- [ ] Capture ≥25 varied real 1080p samples: multiple echo costs, multiple rarities, multiple sonata sets, unleveled *and* fully-leveled (5-substat) echoes, a few deliberately low-contrast/edge-lighting frames. Anonymize (strip UID/account name) before committing.
-- [ ] Write `EchoAccuracy.cs`: counts identity/cost/rarity/level/sonata/mainStat and **each individual substat slot** as separate scored fields — not "echo complete y/n" — matching Tacet-Lab's `accuracy.ts` field-counting rule.
-- [ ] Wire `EchoAccuracy` into a `dotnet test` target (or `Scanner.Cli --run-fixtures`) that runs against the fixture corpus and fails the run if field accuracy regresses below a checked-in floor.
-- [ ] Adopt the acceptance bar from §2e before any README claim of "95% accurate": ≥25 1080p samples, ≥95% combined field accuracy, no field silently defaulted (audit the sonata OCR-text/catalog-default fallback and every other silent-fallback path to confirm each is flagged in output), low-confidence fields never auto-committed.
-- [ ] Once this exists, re-baseline the §3 numbers (97.7% / 94.7% / 100%) against the fixture corpus instead of the ad-hoc session directory.
+- [x] Create `tests/fixtures/echoes/english-1080p/` under the scanner test project — 25 real 1080p panel crops bootstrapped from reviewed corpus output (7.3 MB). Panel crops (not full frames) keep the repo lean; full-frame path stays covered by corpus runs. (No 1440p folder — out of scope, see header note.)
+- [x] C# sidecar record `EchoFixture` mirrors §2e's JSON shape + `sourceImage`/`sourceFullImage`/`verified` + `secondMainStat` extension.
+- [x] Capture ≥25 varied real 1080p samples — DONE as bootstrap (stratified over 20 sonata sets, leveled + unleveled). ⚠️ All 25 are `verified:false` (expected := pipeline output): they pin behavior against silent drift but prove no ground-truth accuracy. Flipping to `verified:true` requires hand-checking each sidecar against its PNG — owner labor, still open.
+- [x] `EchoAccuracy.cs`: identity/cost/rarity/level/sonata/mainStat and each substat slot scored separately (order-free multiset, ±0.051 float tol) — matching Tacet-Lab's field-counting rule.
+- [x] `dotnet test` target (`SonoroScore.Scanner.Tests`, assembly-serial for the shared Tesseract engine): unverified fixtures must match exactly (drift fails → re-baseline sidecars), verified corpus must clear the 0.95 floor. First run already caught a REAL bug (below-threshold null match overwriting the name candidate — fixed, suite green since).
+- [x] Acceptance bar adopted in code (0.95 floor over verified fixtures); no silent defaults (sonata fallback + all silent paths log warnings), low-confidence fields stay editable in SS.
+- [x] §3 numbers re-baselined against the new pipeline (names 99.7% etc. — see §5 note); fixture corpus replaces the ad-hoc session dir as the regression gate.
 
 ---
 
@@ -281,22 +284,22 @@ preprocessing shape documented in [`../Tacet-Lab/docs/architecture.md`](../Tacet
 
 **Goal: close the 1.62-avg-substats/echo gap — the open lever this repo's own status notes already point at ("Y-clustering + `StatPixelMatcher`").**
 
-- [ ] Confirm the substat block's row-splitting is **Y-position-clustered** rather than fixed row-count/spacing offsets — a 1-substat unleveled echo and a 5-substat maxed echo don't lay out identically; if row rects are currently static, that alone would explain worse recall on leveled (more rows, more layout variance) echoes.
-- [ ] For each substat row, run `StatPixelMatcher` **in parallel with** OCR, not only as an HP-specific fallback — cross-check pixel-matched stat type against the OCR'd label the same way sonata already cross-checks icon vs. text.
-- [ ] Confirm `TunableRolls` only *validates/corrects* an OCR'd numeric value to the nearest legal roll, and never fabricates a substat OCR failed to detect at all. Add a unit test asserting a fully-missed substat row stays absent rather than being backfilled from the roll table.
-- [ ] Once §6's fixture corpus exists, check whether the substat gap concentrates in rows 4–5 (bottom of block, likelier clipped by panel-scroll boundary) or is evenly distributed — tells you whether this is a **region-rect problem** (panel not fully captured) or an **OCR problem** (§5 should already have addressed that).
+- [x] Row assignment is Y-position-based, not fixed division: each OCR line goes to the nearest tuned slot center (`SubstatSlot(i)`, block-fraction space scaled per crop), so variable row pitch no longer breaks slotting. (`EchoRegions.SubstatSlot(i)` added; union block follows.)
+- [x] `StatPixelMatcher` runs on every slot in parallel with OCR (both merged-row and split paths); OCR-vs-pixel disagreement logs a warning, never auto-overrides.
+- [x] `TunableRolls` audit: unit test proves far-off values resolve to null (never fabricated) and the 1↔7 OCR swap recovers before Closest.
+- [ ] Row 4–5 gap analysis — OPEN: needs per-slot hit stats the current output doesn't record. Structural coverage (tuned slots + nearest-center assignment) is in; run this once the 25 fixtures are hand-verified and slot-level misses are labeled truth instead of pipeline output.
 
 ---
 
 ## 8. TODO — Accuracy Priority 4: Capture-Time Frame Stability (`AlephalSonata` live path only)
 
-**Goal: port Tacet-Lab's "stable frame sampler and fingerprint gate" + session/frame/job ID
-discipline (`docs/architecture.md`) to the live crawl, so blurry/mid-animation frames never reach `EchoRecognizer`.**
-
-- [ ] After each grid-cell click / scroll burst in `AutoNavigator`, replace the fixed settle sleep with a lightweight frame-stability check (hash/diff two captures a few ms apart; require a match before handing the frame to `EchoRecognizer`).
-- [ ] Extend `AlephalSonata`'s existing trace logging with explicit session/frame/job IDs so a superseded frame (Alt+Tab mid-scan, safety halt fired) can be positively dropped instead of partially processed.
-- [ ] Add duplicate-frame suppression for the crawl: skip re-OCRing a card if the picker grid didn't scroll/change since the last step (e.g. end-of-list).
-- [ ] Once this exists, capture a few known-bad pre-settle frames into the §6 fixture corpus as a **negative test** — assert the pipeline re-captures or flags them rather than silently emitting a low-confidence parse.
+**PARKED — needs the live game to validate.** Frame-stability gating and crawl
+dedup touch the exact timing the navigator was calibrated around (`AfterKeyC`,
+scroll ticks, click holds); changing them blind risks breaking the crawl with no
+way to verify headlessly. Pick up with the game running: hash/diff two captures
+a few ms apart after each grid-cell click/scroll burst, add session/frame/job IDs
+to the trace log, skip re-OCRing unchanged grid pages, and capture known-bad
+pre-settle frames into §6 as negative tests.
 
 ---
 
@@ -304,8 +307,8 @@ discipline (`docs/architecture.md`) to the live crawl, so blurry/mid-animation f
 
 - [ ] Consider a Tesseract dictionary constrained to the closed vocabulary of stat labels + echo/sonata names (from `GameDatabase`'s catalog) — WuWa's field text is bounded, not open text; constraining recognition itself (not just post-hoc `FuzzyMatcher`) could give a further gain.
 - [ ] Evaluate extending icon/pixel-signature matching (already used for rarity + sonata) to any other iconified field in the panel — every field moved from OCR to deterministic pixel matching removes it from the OCR-accuracy conversation entirely, per the project's own "Pixel-First vs. Brittle OCR" design philosophy (README).
-- [ ] Once §5 lands, re-run the WinOcr/Tesseract A/B (`--no-winocr-fallback` / `SONORO_NO_WINOCR=1`) **per field type**, not pipeline-wide — the current regression implies Tesseract wins on main-stat but loses on name/substats; let `ScannerConfig` pick the better engine per field independently.
-- [ ] Extend `NOTICES.md`'s "adapted portions" list to cover the §5 preprocessing port and the §6 fixture/accuracy-harness port once implemented — both are structurally adapted from GPL-3.0 `../Tacet-Lab` docs, same as the existing sonata-icon-matcher entry.
+- [x] Re-run the WinOcr/Tesseract A/B per field type — DONE (see §3/§5 notes): Tesseract wins mains/subs, WinOcr wins names; `ScannerConfig.NameEngine` (+ `--name-engine`) picks per field independently.
+- [x] `NOTICES.md` "adapted portions" extended for the §5 preprocessing port and §6 fixture/accuracy-harness port.
 - [ ] 1440p fixtures + resolution-branching logic — deliberately deferred, see header note. Revisit once 1080p accuracy is fixture-verified and stable.
 
 ---
@@ -320,8 +323,8 @@ discipline (`docs/architecture.md`) to the live crawl, so blurry/mid-animation f
 | ~~`SonataSignatureMatcher.cs` does not exist~~          | ✅ Done: versioned loader + `Match` + `CheckVersion` + `EnsureUpdatedAsync`                  |
 | ~~`sonata_signatures.json` not extracted yet~~          | ✅ Done: 34 sets, versioned object format (legacy array still accepted)                      |
 | ~~`EchoRegions.SonataIcon` rect not defined~~           | ✅ Done                                                                                      |
-| **Tesseract-primary regression: name/substat recall dropped** | ⬅ **Active — this is what §5 targets**                                                |
-| Test run blocked: no .NET SDK on PATH                   | Run Scanner.Cli re-run command (§3) once SDK is available                                    |
-| ⚠️ License: Tacet-Lab is GPL-3.0, not MIT               | ✅ NOTICES.md + headers corrected; extend "adapted portions" list per §9 as §5/§6 land       |
-| No fixture corpus / accuracy is eyeballed, not measured | ⬅ **Active — this is what §6 targets**                                                     |
-| Substat detection gap on leveled echoes (avg 1.62/echo) | ⬅ **Active — this is what §7 targets**                                                     |
+| **Tesseract-primary regression: name/substat recall dropped** | ✅ Resolved via §5 (+hybrid routing): names 99.7%, subs 2.54 avg |
+| Test run blocked: no .NET SDK on PATH                   | ✅ Resolved: SDK 8.0.425 installed; corpus + `dotnet test` both run green |
+| ⚠️ License: Tacet-Lab is GPL-3.0, not MIT               | ✅ NOTICES.md + headers corrected, incl. §5/§6 ports |
+| No fixture corpus / accuracy is eyeballed, not measured | ✅ Harness + 25 bootstrapped fixtures exist; hand-verification open |
+| Substat detection gap on leveled echoes (avg 1.62/echo) | ✅ Narrowed to 2.54 avg via §5+§7; row-level analysis open |

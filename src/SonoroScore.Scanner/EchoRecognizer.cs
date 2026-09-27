@@ -49,10 +49,20 @@ public class EchoRecognizer
 
     private async Task<EchoScanResult> RecognizeBitmapAsync(string imagePath, Bitmap full)
     {
-        // ── 1. Extract panel ────────────────────────────────────────────────
         // Our captured images ARE already the full WuWa window frame.
         // The echo detail panel is at the right side (~78% x, 12% y).
         Bitmap panel = EchoRegions.ExtractPanel(full);
+        return await RecognizePanelAsync(panel, imagePath);
+    }
+
+    /// <summary>
+    /// Recognize an already-cropped echo detail panel. Takes ownership of
+    /// <paramref name="panel"/> (disposed before return). Fixture-test entry point.
+    /// </summary>
+    public async Task<EchoScanResult> RecognizePanelAsync(Bitmap panel, string imagePath)
+    {
+        // ── 1. Extract panel ────────────────────────────────────────────────
+        // (done by caller — panel IS the right-side echo strip here)
 
         var errors   = new List<string>();
         var warnings = new List<string>();
@@ -135,17 +145,22 @@ public class EchoRecognizer
                     {
                         var (e3, s3) = FuzzyMatcher.ClosestMatch(
                             cleanedAuto, _catalog, e => e.Name, threshold: ScannerConfig.EchoNameMinConfidence);
-                        if (s3 > nameScore)
+                        // Guard: below-threshold matches return a null entry —
+                        // never let them overwrite (or lock out) a real candidate.
+                        if (e3 != null && s3 > nameScore)
                         {
                             nameEntry = e3; nameScore = s3; cleanedName = cleanedAuto;
                             nameOcr = nameOcrAuto; // keep evidence consistent with the winner
                         }
-                        else
+                        // Per-line rescue always runs while the score is still low:
+                        // a wrapped name often matches on one clean line even when
+                        // the whole text doesn't.
+                        if (nameScore < 0.90f)
                         {
                             foreach (var line in cleanedAuto.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                             {
                                 var (e4, s4) = FuzzyMatcher.ClosestMatch(line, _catalog, e => e.Name, ScannerConfig.EchoNameMinConfidence);
-                                if (s4 > nameScore) { nameEntry = e4; nameScore = s4; }
+                                if (e4 != null && s4 > nameScore) { nameEntry = e4; nameScore = s4; }
                             }
                         }
                     }
@@ -199,7 +214,26 @@ public class EchoRecognizer
             using var substatsBmp = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
             var (ocrLines, slotRefH) = await OcrLinesAsync(panel);
 
-            double slotHeight = slotRefH / 5.0;
+            // Y-position slotting: each OCR line goes to the nearest tuned slot
+            // center (in block-fraction space, scaled to this crop's pixels), so
+            // variable row pitch doesn't break assignment like fixed division would.
+            var block = EchoRegions.SubstatsBlock;
+            double[] slotCenters = Enumerable.Range(1, 5).Select(i =>
+            {
+                var r = EchoRegions.SubstatSlot(i);
+                return (r.Y + r.Height / 2 - block.Y) / block.Height * slotRefH;
+            }).ToArray();
+            int NearestSlot(double y)
+            {
+                int best = 0;
+                double bestDist = Math.Abs(y - slotCenters[0]);
+                for (int i = 1; i < 5; i++)
+                {
+                    double d = Math.Abs(y - slotCenters[i]);
+                    if (d < bestDist) { bestDist = d; best = i; }
+                }
+                return best;
+            }
             var slotLabels = new string?[5];
             var slotValues = new float?[5];
             var slotPercents = new bool[5];
@@ -208,7 +242,7 @@ public class EchoRecognizer
 
             foreach (var line in ocrLines)
             {
-                int slot = (int)Math.Clamp(Math.Floor(line.Y / slotHeight), 0, 4);
+                int slot = NearestSlot(line.Y + line.Height / 2);
                 string text = line.Text.Trim();
                 string normalized = StatParser.NormalizeOcrArtifacts(text);
 
@@ -247,6 +281,11 @@ public class EchoRecognizer
                 if (slotWhole[s] is { } whole)
                 {
                     if (mainStat != null && whole.Key == mainStat.Key) continue; // no main-stat dup
+                    if (whole.Key != StatKey.Hp && whole.Key != StatKey.HpPercent &&
+                        StatPixelMatcher.DetectHp(substatsBmp, s, 5))
+                    {
+                        warnings.Add($"Substat slot {s + 1}: OCR={whole.Key} but pixel matcher sees HP — kept OCR.");
+                    }
                     var (snappedW, snapConfW) = TunableRolls.Resolve(whole.Key, whole.Value);
                     substats.Add(new SubstatResult(whole.Key.ToString(), whole.Value, snappedW,
                         Math.Min(0.88f, snapConfW), $"{whole.RawLabel} {whole.RawValue}"));
@@ -283,6 +322,14 @@ public class EchoRecognizer
                 {
                     // Prevent main stat duplication in substats
                     if (mainStat != null && key == mainStat.Key) continue;
+
+                    // Pixel cross-check (§7): HP matcher runs on every slot in parallel
+                    // with OCR. Disagreement is logged, never auto-overridden.
+                    if (key != StatKey.Hp && key != StatKey.HpPercent &&
+                        StatPixelMatcher.DetectHp(substatsBmp, s, 5))
+                    {
+                        warnings.Add($"Substat slot {s + 1}: OCR={key} but pixel matcher sees HP — kept OCR.");
+                    }
 
                     var (snapped, snapConf) = TunableRolls.Resolve(key.Value, numVal);
                     var sub = new SubstatResult(key.Value.ToString(), numVal, snapped, Math.Min(conf, snapConf), $"{lbl} {numVal}{(isPercent ? "%" : "")}");

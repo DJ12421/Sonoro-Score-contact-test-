@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonoroScore.Scanner", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonoroScore.Scanner.Cli", "src\SonoroScore.Scanner.Cli\SonoroScore.Scanner.Cli.csproj", "{9202AD0C-63C5-4B3C-A9C2-1EEAEBBB31D0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonoroScore.Scanner.Tests", "src\SonoroScore.Scanner.Tests\SonoroScore.Scanner.Tests.csproj", "{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,6 +46,10 @@ Global
 		{9202AD0C-63C5-4B3C-A9C2-1EEAEBBB31D0}.Debug|Any CPU.Build.0 = Debug|x64
 		{9202AD0C-63C5-4B3C-A9C2-1EEAEBBB31D0}.Release|Any CPU.ActiveCfg = Release|x64
 		{9202AD0C-63C5-4B3C-A9C2-1EEAEBBB31D0}.Release|Any CPU.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{425EBA4C-BCA2-42F6-AB75-9702790543F0} = {9B2F9AED-CD06-42D3-AED6-3ED93EAD1EAE}
@@ -51,5 +57,6 @@ Global
 		{3DE347F6-C343-4C00-BE65-9054DA285DAE} = {9B2F9AED-CD06-42D3-AED6-3ED93EAD1EAE}
 		{2CD78B54-CE4C-49BF-BA1B-A6953A5708CE} = {9B2F9AED-CD06-42D3-AED6-3ED93EAD1EAE}
 		{9202AD0C-63C5-4B3C-A9C2-1EEAEBBB31D0} = {9B2F9AED-CD06-42D3-AED6-3ED93EAD1EAE}
+		{A1B2C3D4-E5F6-4789-ABCD-EF1234567890} = {9B2F9AED-CD06-42D3-AED6-3ED93EAD1EAE}
 	EndGlobalSection
 EndGlobal

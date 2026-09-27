@@ -1,0 +1,133 @@
+﻿{
+    "fixtureVersion":  1,
+    "layout":  "echo-detail",
+    "resolution":  {
+                       "height":  1080,
+                       "width":  1920
+                   },
+    "uiScale":  1,
+    "panelRect":  {
+                      "y":  0.1212,
+                      "width":  0.1882,
+                      "height":  0.7792,
+                      "x":  0.7815
+                  },
+    "fieldRects":  {
+                       "Substat2":  {
+                                        "y":  0.252,
+                                        "width":  0.8525,
+                                        "height":  0.034,
+                                        "x":  0.1075
+                                    },
+                       "Cost":  {
+                                    "y":  0.0715,
+                                    "width":  0.2505,
+                                    "height":  0.026,
+                                    "x":  0.0215
+                                },
+                       "SonataZone":  {
+                                          "y":  0.462,
+                                          "width":  1,
+                                          "height":  0.478,
+                                          "x":  0
+                                      },
+                       "OwnerZone":  {
+                                         "y":  0.956,
+                                         "width":  0.9705,
+                                         "height":  0.044,
+                                         "x":  0.0295
+                                     },
+                       "Substat1":  {
+                                        "y":  0.21,
+                                        "width":  0.8525,
+                                        "height":  0.034,
+                                        "x":  0.1075
+                                    },
+                       "Substat3":  {
+                                        "y":  0.293,
+                                        "width":  0.8525,
+                                        "height":  0.0365,
+                                        "x":  0.1075
+                                    },
+                       "SonataIcon":  {
+                                          "y":  0.0195,
+                                          "width":  0.081,
+                                          "height":  0.0385,
+                                          "x":  0.901
+                                      },
+                       "Level":  {
+                                     "y":  0.018,
+                                     "width":  0.119,
+                                     "height":  0.037,
+                                     "x":  0.776
+                                 },
+                       "Substat4":  {
+                                        "y":  0.3375,
+                                        "width":  0.8525,
+                                        "height":  0.032,
+                                        "x":  0.1075
+                                    },
+                       "MainStatStrip":  {
+                                             "y":  0.1225,
+                                             "width":  0.8735,
+                                             "height":  0.039,
+                                             "x":  0.1065
+                                         },
+                       "SecondMainStat":  {
+                                              "y":  0.1695,
+                                              "width":  0.8735,
+                                              "height":  0.034,
+                                              "x":  0.1065
+                                          },
+                       "Substat5":  {
+                                        "y":  0.3805,
+                                        "width":  0.8525,
+                                        "height":  0.033,
+                                        "x":  0.1075
+                                    },
+                       "EchoName":  {
+                                        "y":  0.02,
+                                        "width":  0.77,
+                                        "height":  0.0395,
+                                        "x":  0
+                                    }
+                   },
+    "sourceImage":  "echo_p05_r01_c01_idx061_panel.png",
+    "sourceFullImage":  "echo_p05_r01_c01_idx061.png",
+    "verified":  false,
+    "name":  "Chop Chop",
+    "cost":  3,
+    "rarity":  5,
+    "level":  25,
+    "sonata":  "Eternal Radiance",
+    "mainStat":  {
+                     "key":  "atkPercent",
+                     "value":  18
+                 },
+    "secondMainStat":  {
+                           "key":  "hp",
+                           "value":  2280
+                       },
+    "subStats":  [
+                     {
+                         "key":  "critRate",
+                         "value":  6.9
+                     },
+                     {
+                         "key":  "skillDamage",
+                         "value":  9.4
+                     },
+                     {
+                         "key":  "defPercent",
+                         "value":  13.8
+                     },
+                     {
+                         "key":  "hpPercent",
+                         "value":  10.1
+                     },
+                     {
+                         "key":  "atk",
+                         "value":  50
+                     }
+                 ]
+}
