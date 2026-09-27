@@ -125,17 +125,17 @@ public class InputSimulator : IDisposable
         }
         else if (VirtualKeys.TryGetValue(keyName, out var vk))
         {
-            byte scan = (byte)Win32.MapVirtualKey(vk, 0);
-            Win32.keybd_event(vk, scan, Win32.KEYEVENTF_KEYDOWN, UIntPtr.Zero);
+            byte scan = ScanCodes.TryGetValue(keyName, out var sc) ? (byte)sc : (byte)Win32.MapVirtualKey(vk, 0);
+            Win32.keybd_event(vk, scan, Win32.KEYEVENTF_SCANCODE, UIntPtr.Zero);
             await Task.Delay(holdMs, ct);
-            Win32.keybd_event(vk, scan, Win32.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            Win32.keybd_event(vk, scan, Win32.KEYEVENTF_SCANCODE | Win32.KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
     }
 
     public async Task SendClickAsync(int screenX, int screenY, int holdMs = 40, CancellationToken ct = default)
     {
         Win32.SetCursorPos(screenX, screenY);
-        await Task.Delay(15, ct);
+        await Task.Delay(35, ct); // Wait 2 game frames (~33ms at 60fps) for Slate viewport focus
 
         if (_useInterception && _interceptionContext != IntPtr.Zero)
         {
@@ -149,9 +149,10 @@ public class InputSimulator : IDisposable
         }
         else
         {
-            Win32.mouse_event(Win32.MOUSEEVENTF_LEFTDOWN, screenX, screenY, 0, UIntPtr.Zero);
+            // SetCursorPos placed cursor at (screenX, screenY). dx=0, dy=0 avoids unintended relative jump.
+            Win32.mouse_event(Win32.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
             await Task.Delay(holdMs, ct);
-            Win32.mouse_event(Win32.MOUSEEVENTF_LEFTUP, screenX, screenY, 0, UIntPtr.Zero);
+            Win32.mouse_event(Win32.MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
         }
     }
 

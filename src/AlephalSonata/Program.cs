@@ -48,6 +48,8 @@ internal class Program
         PrintBanner();
         Log("INFO", $"Diagnostic logger session initialized. Log file: {logPath}");
 
+        PrintAdminStatus();
+
         using var input = new InputSimulator();
         PrintDriverStatus(input);
 
@@ -156,14 +158,36 @@ internal class Program
 
     private static void PrintBanner()
     {
+        var ver = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "1.0.1";
         Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.WriteLine(@"
+        Console.WriteLine($@"
     ╔═══════════════════════════════════════════════════════╗
-    ║       ALEPHAL-SONATA (ℵ-Sonata)                       ║
+    ║       ALEPHAL-SONATA (ℵ-Sonata) v{ver,-10}           ║
     ║   Diagnostic Engine & Verbose Process Debugger        ║
     ║   Real-time HID Strokes, Window Tracking & Traces     ║
     ╚═══════════════════════════════════════════════════════╝");
         Console.ResetColor();
+    }
+
+    private static void PrintAdminStatus()
+    {
+        bool isAdmin = false;
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            isAdmin = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch { }
+
+        if (isAdmin)
+        {
+            Log("OK", "Privilege: Elevated as Administrator (Windows UIPI bypass active).");
+        }
+        else
+        {
+            Log("ERROR", "Privilege: NOT RUNNING AS ADMINISTRATOR! Windows UIPI will block synthetic clicks/keystrokes to Wuthering Waves.");
+        }
     }
 
     private static void PrintDriverStatus(InputSimulator input)
