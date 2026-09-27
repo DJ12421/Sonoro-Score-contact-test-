@@ -1,0 +1,16 @@
+## .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+_ReSharper*/
+*.DotSettings.user
+
+## OS Files
+.DS_Store
+Thumbs.db
