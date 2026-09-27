@@ -146,4 +146,87 @@ public class AutoNavigator
 
         Report(NavigationStep.Completed, "Grid crawl completed successfully.");
     }
+
+    public async Task<int> CaptureEchoGridAsync(
+        string outputDirectory,
+        int maxPages = 3,
+        int scrollTicks = -34,
+        int preAnimationCaptureDelayMs = 50,
+        Action<int, int, int, string>? cardCaptured = null,
+        CancellationToken ct = default)
+    {
+        if (!WindowManager.GetGameBounds(out var bounds))
+        {
+            Report(NavigationStep.Aborted, "Cannot read game window bounds.");
+            return 0;
+        }
+
+        System.IO.Directory.CreateDirectory(outputDirectory);
+        Report(NavigationStep.ScanningGrid, $"Starting raw screen capture test suite across {maxPages} pages (delay: {preAnimationCaptureDelayMs}ms, scroll: {scrollTicks})...");
+
+        int totalCaptured = 0;
+
+        for (int page = 0; page < maxPages; page++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!CheckFocus()) return totalCaptured;
+
+            WindowManager.GetGameBounds(out bounds);
+
+            for (int r = 0; r < _config.GridRows; r++)
+            {
+                for (int c = 0; c < _config.GridCols; c++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (!CheckFocus()) return totalCaptured;
+
+                    float fracX = _config.FirstCellFraction.X + c * _config.StepFraction.X;
+                    float fracY = _config.FirstCellFraction.Y + r * _config.StepFraction.Y;
+
+                    int screenX = bounds.Left + (int)(bounds.Width * fracX);
+                    int screenY = bounds.Top + (int)(bounds.Height * fracY);
+
+                    // Click card
+                    await _input.SendClickAsync(screenX, screenY, ct: ct);
+                    EchoSelected?.Invoke(page, r, c, screenX, screenY);
+
+                    // Wait for stats text to render but BEFORE 3D shimmer animation finishes
+                    if (preAnimationCaptureDelayMs > 0)
+                    {
+                        await Task.Delay(preAnimationCaptureDelayMs, ct);
+                    }
+
+                    // Capture raw frame
+                    using var bmp = ScreenCapturer.CaptureGameWindow();
+                    if (bmp != null)
+                    {
+                        totalCaptured++;
+                        string filename = $"echo_p{page + 1:D2}_r{r + 1:D2}_c{c + 1:D2}_idx{totalCaptured:D3}.png";
+                        string fullPath = ScreenCapturer.SaveBitmap(bmp, outputDirectory, filename);
+                        cardCaptured?.Invoke(page, r, c, fullPath);
+                    }
+
+                    // Small cadence pacing
+                    await Task.Delay(60, ct);
+                }
+            }
+
+            // Scroll to next page if not on last page
+            if (page < maxPages - 1)
+            {
+                Report(NavigationStep.ScrollingPage, $"Finished Page {page + 1}. Scrolling down {scrollTicks} ticks...");
+
+                int anchorX = bounds.Left + (int)(bounds.Width * _config.ScrollAnchorFraction.X);
+                int anchorY = bounds.Top + (int)(bounds.Height * _config.ScrollAnchorFraction.Y);
+                Win32.SetCursorPos(anchorX, anchorY);
+                await Task.Delay(50, ct);
+
+                await _input.SendScrollAsync(scrollTicks, _config.ScrollEventGapMs, ct);
+                await Task.Delay(_config.PageScrollDelayMs, ct);
+            }
+        }
+
+        Report(NavigationStep.Completed, $"Raw screen dataset captured: {totalCaptured} images saved to {outputDirectory}.");
+        return totalCaptured;
+    }
 }

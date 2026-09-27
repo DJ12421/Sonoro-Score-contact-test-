@@ -39,9 +39,12 @@ internal class Program
         Console.Title = "Alephal-Sonata (ℵ-Sonata) — Diagnostic Debugger & Process Logger";
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        // Initialize logging folder
+        // Initialize logging and image dataset folders
         string logsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
         Directory.CreateDirectory(logsDir);
+        string imagesDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "aleph_images");
+        Directory.CreateDirectory(imagesDir);
+
         string logPath = Path.Combine(logsDir, $"aleph_trace_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         _logWriter = new StreamWriter(logPath, append: true);
 
@@ -85,9 +88,11 @@ internal class Program
             Console.WriteLine("3. Test Page Scroll Calibration (-34 ticks)");
             Console.WriteLine("4. Run Full Auto-Navigation with Verbose Tracing");
             Console.WriteLine("5. Run Active Picker Crawl with Verbose Tracing");
-            Console.WriteLine("6. Open Logs Directory");
+            Console.WriteLine("6. Capture Raw Screen Dataset (Pre-Animation Low-Noise Test Suite)");
+            Console.WriteLine("7. Open Images Directory (aleph_images)");
+            Console.WriteLine("8. Open Logs Directory");
             Console.WriteLine("0. Exit");
-            Console.Write("\nSelect an action [0-6]: ");
+            Console.Write("\nSelect an action [0-8]: ");
 
             var choice = Console.ReadLine()?.Trim();
             if (choice == "0") break;
@@ -140,6 +145,93 @@ internal class Program
                     break;
 
                 case "6":
+                    Console.WriteLine();
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("--- RAW SCREEN DATASET CAPTURE (OFFLINE CALIBRATION TEST SUITE) ---");
+                    Console.ResetColor();
+
+                    Console.Write("Start mode [1: Overworld -> AutoNav, 2: Active Picker (Default)]: ");
+                    var modeStr = Console.ReadLine()?.Trim();
+                    bool fromOverworld = modeStr == "1";
+
+                    Console.Write("Pages to capture [Default: 3]: ");
+                    var p6Str = Console.ReadLine()?.Trim();
+                    int p6 = int.TryParse(p6Str, out int v6) && v6 > 0 ? v6 : 3;
+
+                    Console.Write($"Scroll notches per page [Default: {config.ScrollTicksPerPage}]: ");
+                    var scrollStr = Console.ReadLine()?.Trim();
+                    int scrollTicks = int.TryParse(scrollStr, out int st) ? st : config.ScrollTicksPerPage;
+
+                    Console.Write("Capture delay after card click in ms [Default: 50 ms (pre-animation shimmer)]: ");
+                    var delayStr = Console.ReadLine()?.Trim();
+                    int captureDelay = int.TryParse(delayStr, out int cd) && cd >= 0 ? cd : 50;
+
+                    string sessionDir = Path.Combine(imagesDir, $"session_{DateTime.Now:yyyyMMdd_HHmmss}");
+                    Directory.CreateDirectory(sessionDir);
+
+                    Log("INFO", $"Dataset destination: {sessionDir}");
+                    Log("INFO", $"Capture plan: {p6} pages ({p6 * 15} cards max), scroll: {scrollTicks} ticks, pre-render delay: {captureDelay} ms.");
+                    Log("INFO", "Bringing game to foreground in 2 seconds... (Alt+Tab to cancel)");
+                    await Task.Delay(2000, cts.Token);
+
+                    if (fromOverworld)
+                    {
+                        var ready = await navigator.NavigateToEchoPickerAsync(cts.Token);
+                        if (!ready) break;
+                    }
+                    else
+                    {
+                        if (!await WindowManager.EnsureForegroundAsync())
+                        {
+                            Log("ERROR", "Failed to focus Wuthering Waves window.");
+                            break;
+                        }
+                    }
+
+                    int captured = await navigator.CaptureEchoGridAsync(
+                        sessionDir,
+                        maxPages: p6,
+                        scrollTicks: scrollTicks,
+                        preAnimationCaptureDelayMs: captureDelay,
+                        cardCaptured: (page, r, c, path) =>
+                        {
+                            Log("OK", $"[CAPTURED] Page {page + 1} | Row {r + 1} Col {c + 1} -> {Path.GetFileName(path)}");
+                        },
+                        ct: cts.Token);
+
+                    Log("OK", $"Raw dataset capture complete! {captured} images saved to: {sessionDir}");
+
+                    // Save session metadata
+                    string metaPath = Path.Combine(sessionDir, "session_meta.json");
+                    File.WriteAllText(metaPath, System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        timestamp = DateTime.UtcNow,
+                        pages = p6,
+                        scrollTicks = scrollTicks,
+                        preAnimationCaptureDelayMs = captureDelay,
+                        totalCaptured = captured
+                    }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+                    Console.Write("\nOpen captured images folder? [Y/n]: ");
+                    if (Console.ReadLine()?.Trim().ToLowerInvariant() != "n")
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = sessionDir,
+                            UseShellExecute = true
+                        });
+                    }
+                    break;
+
+                case "7":
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = imagesDir,
+                        UseShellExecute = true
+                    });
+                    break;
+
+                case "8":
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = logsDir,
