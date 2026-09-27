@@ -51,13 +51,16 @@ public static class TesseractOcr
 
     /// <summary>
     /// Run OCR on the given bitmap and return the extracted plain text.
+    /// <paramref name="mode"/> selects Tesseract's page segmentation:
+    /// <c>SingleLine</c> for one-line strips (level, cost, stat lines),
+    /// <c>SingleBlock</c> for uniform text blocks, <c>Auto</c> for mixed zones.
     /// </summary>
-    public static async Task<string> RecognizeAsync(Bitmap bmp)
+    public static async Task<string> RecognizeAsync(Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
     {
         return await Task.Run(() =>
         {
             using var pix = ToPix(bmp);
-            using var page = Engine.Process(pix);
+            using var page = Engine.Process(pix, (PageSegMode?)mode);
             return page.GetText();
         });
     }
@@ -66,13 +69,14 @@ public static class TesseractOcr
     /// Run OCR and return detected lines with basic bounds information.
     /// The returned <see cref="OcrLineInfo"/> matches the type defined in WinOcr.cs.
     /// </summary>
-    public static async Task<List<OcrLineInfo>> RecognizeLinesWithBoundsAsync(Bitmap bmp)
+    public static async Task<List<OcrLineInfo>> RecognizeLinesWithBoundsAsync(
+        Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
     {
         return await Task.Run(() =>
         {
             var result = new List<OcrLineInfo>();
             using var pix = ToPix(bmp);
-            using var page = Engine.Process(pix);
+            using var page = Engine.Process(pix, (PageSegMode?)mode);
             using var iter = page.GetIterator();
             if (iter == null) return result;
 

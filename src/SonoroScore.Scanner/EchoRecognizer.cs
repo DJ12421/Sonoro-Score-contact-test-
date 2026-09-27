@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using Tesseract;
 
 namespace SonoroScore.Scanner;
 
@@ -73,15 +74,17 @@ public class EchoRecognizer
         try
         {
             // ── 2. OCR individual regions ───────────────────────────────────
-            string nameOcr       = await OcrRegionAsync(panel, EchoRegions.EchoName,       upscale: true);
-            string levelOcr      = await OcrRegionAsync(panel, EchoRegions.Level,          upscale: true);
-            string costOcr       = await OcrRegionAsync(panel, EchoRegions.Cost,           upscale: true);
-            string mainStatLine  = await OcrRegionAsync(panel, EchoRegions.MainStatStrip,  upscale: true);
-            string secondMainStatLine = await OcrRegionAsync(panel, EchoRegions.SecondMainStat, upscale: true);
+            // PSM per region shape: single-line strips → SingleLine, uniform
+            // multi-line blocks → SingleBlock, mixed/free zones → Auto.
+            string nameOcr = await OcrNameAsync(panel);
+            string levelOcr      = await OcrRegionAsync(panel, EchoRegions.Level,          upscale: true, mode: PageSegMode.SingleLine);
+            string costOcr       = await OcrRegionAsync(panel, EchoRegions.Cost,           upscale: true, mode: PageSegMode.SingleLine);
+            string mainStatLine  = await OcrRegionAsync(panel, EchoRegions.MainStatStrip,  upscale: true, mode: PageSegMode.SingleLine);
+            string secondMainStatLine = await OcrRegionAsync(panel, EchoRegions.SecondMainStat, upscale: true, mode: PageSegMode.SingleLine);
             // Zone B: Sonata Effect region (starts below skill text)
-            string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone,     upscale: true);
+            string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone,     upscale: true, mode: PageSegMode.Auto);
             // Zone C: Owner strip
-            string ownerZoneOcr  = await OcrRegionAsync(panel, EchoRegions.OwnerZone,      upscale: true);
+            string ownerZoneOcr  = await OcrRegionAsync(panel, EchoRegions.OwnerZone,      upscale: true, mode: PageSegMode.SingleLine);
 
             _log?.Invoke($"    Name OCR: \"{nameOcr.Replace('\n',' ')}\"");
 
@@ -105,6 +108,36 @@ public class EchoRecognizer
                     var (e2, s2) = FuzzyMatcher.ClosestMatch(window, _catalog, e => e.Name, ScannerConfig.EchoNameMinConfidence);
                     if (s2 > nameScore) { nameEntry = e2; nameScore = s2; }
                 }
+            }
+
+            // SingleLine PSM can clip wrapped (2-line) names: re-OCR with Auto
+            // segmentation as a second chance when the score is still low.
+            if (nameScore < 0.75f && TesseractOcr.IsAvailable)
+            {
+                try
+                {
+                    string nameOcrAuto = await OcrRegionAsync(panel, EchoRegions.EchoName, upscale: true, mode: PageSegMode.Auto);
+                    string cleanedAuto = CleanOcrText(nameOcrAuto);
+                    if (!string.IsNullOrWhiteSpace(cleanedAuto))
+                    {
+                        var (e3, s3) = FuzzyMatcher.ClosestMatch(
+                            cleanedAuto, _catalog, e => e.Name, threshold: ScannerConfig.EchoNameMinConfidence);
+                        if (s3 > nameScore)
+                        {
+                            nameEntry = e3; nameScore = s3; cleanedName = cleanedAuto;
+                            nameOcr = nameOcrAuto; // keep evidence consistent with the winner
+                        }
+                        else
+                        {
+                            foreach (var line in cleanedAuto.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                var (e4, s4) = FuzzyMatcher.ClosestMatch(line, _catalog, e => e.Name, ScannerConfig.EchoNameMinConfidence);
+                                if (s4 > nameScore) { nameEntry = e4; nameScore = s4; }
+                            }
+                        }
+                    }
+                }
+                catch { /* keep SingleLine result */ }
             }
 
             if (nameEntry == null)
@@ -157,12 +190,22 @@ public class EchoRecognizer
             var slotValues = new float?[5];
             var slotPercents = new bool[5];
             var slotValStrs = new string?[5];
+            var slotWhole = new ParsedStat?[5];
 
             foreach (var line in ocrLines)
             {
                 int slot = (int)Math.Clamp(Math.Floor(line.Y / slotHeight), 0, 4);
                 string text = line.Text.Trim();
                 string normalized = StatParser.NormalizeOcrArtifacts(text);
+
+                // Tesseract emits merged "Label Value" rows (e.g. "ATK 7.9%");
+                // WinOcr emits split label/value lines. Try the merged parse first.
+                var whole = StatParser.ParseLine(normalized);
+                if (whole != null)
+                {
+                    slotWhole[slot] = whole;
+                    continue;
+                }
 
                 // If line is a value (e.g. "8.4%", "150", "10.1%")
                 var valMatch = Regex.Match(normalized, @"^[-+]?\s*(\d+(?:[.,]\d+)?)\s*(%)?$");
@@ -186,6 +229,16 @@ public class EchoRecognizer
             var substats = new List<SubstatResult>();
             for (int s = 0; s < 5; s++)
             {
+                // Merged "Label Value" row (Tesseract style): key+value in one hit.
+                if (slotWhole[s] is { } whole)
+                {
+                    if (mainStat != null && whole.Key == mainStat.Key) continue; // no main-stat dup
+                    var (snappedW, snapConfW) = TunableRolls.Resolve(whole.Key, whole.Value);
+                    substats.Add(new SubstatResult(whole.Key.ToString(), whole.Value, snappedW,
+                        Math.Min(0.88f, snapConfW), $"{whole.RawLabel} {whole.RawValue}"));
+                    continue;
+                }
+
                 if (slotValues[s] == null) continue; // slot is empty (unleveled echo)
                 float numVal = slotValues[s]!.Value;
                 bool isPercent = slotPercents[s];
@@ -354,26 +407,54 @@ public class EchoRecognizer
     /// <see cref="ScannerConfig.OcrMinTextLength"/>).
     /// Set <c>ScannerConfig.UseWindowsOcrFallback=false</c> for QA Tesseract-only runs.
     /// </summary>
-    private static async Task<string> OcrRegionAsync(Bitmap panel, System.Drawing.RectangleF region, bool upscale)
+    /// <summary>
+    /// Name-strip OCR with per-engine routing (<see cref="ScannerConfig.NameEngine"/>).
+    /// Windows-only is the measured default for the stylized name font.
+    /// </summary>
+    private static async Task<string> OcrNameAsync(Bitmap panel)
+    {
+        switch (ScannerConfig.NameEngine)
+        {
+            case ScannerConfig.OcrEnginePreference.WindowsOnly:
+                using (var bmp = PreprocessForOcr(panel, EchoRegions.EchoName))
+                    return await WinOcr.RecognizeAsync(bmp);
+            case ScannerConfig.OcrEnginePreference.TesseractOnly:
+                using (var bmp2 = PreprocessForOcr(panel, EchoRegions.EchoName))
+                    return await TesseractOcr.RecognizeAsync(bmp2, PageSegMode.SingleLine);
+            default:
+                return await OcrRegionAsync(panel, EchoRegions.EchoName, upscale: true, mode: PageSegMode.SingleLine);
+        }
+    }
+
+    private static Bitmap PreprocessForOcr(Bitmap panel, System.Drawing.RectangleF region)
+    {
+        using var crop = EchoRegions.CropRegion(panel, region);
+        using var enhanced = ImagePreprocessor.EnhanceForOcr(crop);
+        return ImagePreprocessor.Upscale2x(enhanced);
+    }
+
+    private static async Task<string> OcrRegionAsync(
+        Bitmap panel, System.Drawing.RectangleF region, bool upscale,
+        PageSegMode mode = PageSegMode.Auto)
     {
         using var crop = EchoRegions.CropRegion(panel, region);
         using var enhanced = ImagePreprocessor.EnhanceForOcr(crop);
         if (upscale)
         {
             using var up = ImagePreprocessor.Upscale2x(enhanced);
-            return await OcrTextAsync(up);
+            return await OcrTextAsync(up, mode);
         }
-        return await OcrTextAsync(enhanced);
+        return await OcrTextAsync(enhanced, mode);
     }
 
-    private static async Task<string> OcrTextAsync(Bitmap bmp)
+    private static async Task<string> OcrTextAsync(Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
     {
         bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
         if (TesseractOcr.IsAvailable)
         {
             try
             {
-                string t = await TesseractOcr.RecognizeAsync(bmp);
+                string t = await TesseractOcr.RecognizeAsync(bmp, mode);
                 if (!fallbackAllowed)
                     return t;
                 if (ScannerConfig.FallbackOnEmptyTesseractResult &&
@@ -407,10 +488,16 @@ public class EchoRecognizer
         {
             try
             {
-                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(bmp);
+                // Substats arrive here as one uniform multi-line block.
+                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(bmp, PageSegMode.SingleBlock);
                 if (!fallbackAllowed)
                     return lines;
-                bool usable = lines.Count > 0 && lines.Any(l => !string.IsNullOrWhiteSpace(l.Text));
+                // Quality gate: every substat row carries digits. A digit-free
+                // result means Tesseract's segmentation failed on this crop —
+                // fall through to Windows OCR instead of serving junk lines.
+                bool usable = lines.Count > 0
+                    && lines.Any(l => !string.IsNullOrWhiteSpace(l.Text))
+                    && lines.Any(l => l.Text.Any(char.IsDigit));
                 if (!ScannerConfig.FallbackOnEmptyTesseractResult || usable)
                     return lines;
                 // else fall through to Windows OCR

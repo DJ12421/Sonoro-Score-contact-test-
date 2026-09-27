@@ -131,10 +131,16 @@ This must be **converted to a C# resource** (JSON file or embedded array).
   ```powershell
   dotnet run --project src/SonoroScore.Scanner.Cli -c Release -- --dir publish\AlephalSonata\aleph_images\session_20260927_204453 --export-tacet-auto --export-good-auto
   ```
-  Full corpus (300 images, 58s, 194ms/image):
-  names 293/300 (97.7%), main stats 284/300 (94.7%),
-  sonata 300/300 (100.0%, **all via icon match**, 0 via OCR fallback — P2 target met),
-  complete 37/300 (12.3%), avg substats 1.62/echo.
+  Full corpus (300 images) A/B, tuned regions throughout:
+  | run | names | main | 2nd main | sonata | complete | subs avg |
+  |-----|-------|------|----------|--------|----------|----------|
+  | WinOcr-only | 91.7% | 93.7% | 24.7% | 100% icon | 6.0% | 1.47 |
+  | Tesseract-primary (PSM per region) | 66.0% | 91.0% | 83.3% | 100% icon | 19.7% | 2.29 |
+  | Hybrid (names→WinOcr, rest→Tesseract) | 92.0% | 91.0% | 83.3% | 100% icon | 25.0% | 2.29 |
+  Shipped: hybrid (`ScannerConfig.NameEngine = WindowsOnly`, `--name-engine` to override).
+  Keys to the Tesseract win: per-region PSM (SingleLine strips, SingleBlock
+  substats), merged "Label Value" row parsing (`slotWhole` + trailing-junk
+  strip), digit-presence fallback gate. Tesseract cost: ~480ms vs ~190ms/image.
   Exports: `tacet-lab-backup_*.json` + `sonoro-good_*.json` (284 echoes, 16 skipped w/o main stat).
   Note: late pages (p20) show 0 substats — consistent with unleveled echoes (locked
   substat rows); `IsComplete` (≥4 substats) can never hit on those, so the 12.3%

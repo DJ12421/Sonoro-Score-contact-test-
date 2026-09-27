@@ -54,10 +54,16 @@ public static class StatParser
         if (string.IsNullOrWhiteSpace(text)) return "";
         // Clean leading non-letters like "+ ATK", "( ATK", "✦ HP" -> "ATK", "HP"
         string s = Regex.Replace(text, @"^[\(\[\{<\|+*~✦\-•\s]+", "");
+        // Clean trailing OCR junk like "07)" or "12.6]": keep letters, digits, %, dots, spaces.
+        s = Regex.Replace(s, @"[^0-9a-zA-Z%\.\s]+$", "");
         // Normalize OCR percentage artifacts: "30.00/0" -> "30.0%", "10.90/0" -> "10.9%", "69/0" -> "6.9%"
         s = Regex.Replace(s, @"(\d+)\s*(?:0/0|/0|o/o|O/O)", "$1%");
         return s.Trim();
     }
+
+    /// <summary>True for stat keys whose values are always percentages.</summary>
+    public static bool IsPercentKey(StatKey key) => key is not StatKey.Unknown
+        and not StatKey.Hp and not StatKey.Atk and not StatKey.Def;
 
     public static StatKey? MatchLabel(string label)
     {

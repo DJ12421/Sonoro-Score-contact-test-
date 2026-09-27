@@ -39,6 +39,24 @@ public static class ScannerConfig
     public static int OcrMinTextLength { get; set; } = 2;
 
     // ── Confidence thresholds (Priority 3) ─────────────────────────────────
+    /// <summary>Per-region OCR engine routing.</summary>
+    public enum OcrEnginePreference
+    {
+        /// <summary>Tesseract primary with Windows fallback (standard path).</summary>
+        Auto,
+        /// <summary>Tesseract only (pure QA mode; empty results stay empty).</summary>
+        TesseractOnly,
+        /// <summary>Windows OCR only.</summary>
+        WindowsOnly,
+    }
+
+    /// <summary>
+    /// Engine used for the echo-name strip. Default <c>WindowsOnly</c>: measured
+    /// 91.7% vs 66.0% for Tesseract on the 300-image corpus (stylized name font).
+    /// CLI: <c>--name-engine auto|tesseract|windows</c>.
+    /// </summary>
+    public static OcrEnginePreference NameEngine { get; set; } = OcrEnginePreference.WindowsOnly;
+
     /// <summary>Icon pixel-signature win threshold (EchoRecognizer step 9). Default 0.70.</summary>
     public static double SonataIconMinConfidence { get; set; } = 0.70;
 

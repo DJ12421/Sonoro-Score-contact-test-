@@ -36,9 +36,17 @@ internal class Program
             else if (args[i] == "--export-good" && i + 1 < args.Length) exportGood = args[++i];
             else if (args[i] == "--export-good-auto") exportGood = "__auto__";
             else if (args[i] == "--no-winocr-fallback") ScannerConfig.UseWindowsOcrFallback = false;
+            else if (args[i] == "--name-engine" && i + 1 < args.Length)
+                ScannerConfig.NameEngine = args[++i].ToLowerInvariant() switch
+                {
+                    "tesseract" => ScannerConfig.OcrEnginePreference.TesseractOnly,
+                    "windows" => ScannerConfig.OcrEnginePreference.WindowsOnly,
+                    _ => ScannerConfig.OcrEnginePreference.Auto,
+                };
             else if (args[i] == "--update-signatures") updateSignatures = true;
             else if (args[i] == "--signature-url" && i + 1 < args.Length) signatureUrl = args[++i];
             else if (args[i] == "--diag-tess") return await DiagTesseract();
+            else if (args[i] == "--dump-lines" && i + 1 < args.Length) return await DumpLines(args[++i]);
         }
 
         // Default test suite location
@@ -268,6 +276,37 @@ internal class Program
             .Where(m => m.ModuleName.Contains("tesseract", StringComparison.OrdinalIgnoreCase)
                      || m.ModuleName.Contains("leptonica", StringComparison.OrdinalIgnoreCase)))
             Console.WriteLine($"native: {mod.ModuleName} <- {mod.FileName}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Hidden diagnostic: crop the substats block of one image exactly like the
+    /// pipeline does, then print what each OCR engine sees (text + Y/X bounds).
+    /// </summary>
+    static async Task<int> DumpLines(string imagePath)
+    {
+        if (!File.Exists(imagePath)) { Console.WriteLine($"Not found: {imagePath}"); return 1; }
+        using var full = new System.Drawing.Bitmap(imagePath);
+        using var panel = EchoRegions.ExtractPanel(full);
+        Console.WriteLine($"panel={panel.Width}x{panel.Height} block={EchoRegions.SubstatsBlock}");
+        using var crop = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
+        using var up = ImagePreprocessor.Upscale2x(ImagePreprocessor.EnhanceForOcr(crop));
+        Console.WriteLine($"upscaled={up.Width}x{up.Height} tesseractAvailable={TesseractOcr.IsAvailable}");
+
+        if (TesseractOcr.IsAvailable)
+        {
+            foreach (var mode in new[] { Tesseract.PageSegMode.Auto, Tesseract.PageSegMode.SingleBlock })
+            {
+                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(up, mode);
+                Console.WriteLine($"-- Tesseract {mode}: {lines.Count} lines");
+                foreach (var l in lines)
+                    Console.WriteLine($"   [y={l.Y:F0} x={l.X:F0} w={l.Width:F0} h={l.Height:F0}] \"{l.Text}\"");
+            }
+        }
+        var wlines = await WinOcr.RecognizeLinesWithBoundsAsync(up);
+        Console.WriteLine($"-- WinOcr: {wlines.Count} lines");
+        foreach (var l in wlines)
+            Console.WriteLine($"   [y={l.Y:F0} x={l.X:F0} w={l.Width:F0} h={l.Height:F0}] \"{l.Text}\"");
         return 0;
     }
 }
