@@ -132,7 +132,7 @@ public class InputSimulator : IDisposable
         }
     }
 
-    public async Task SendClickAsync(int screenX, int screenY, int holdMs = 40, CancellationToken ct = default)
+    public async Task SendClickAsync(int screenX, int screenY, int holdMs = 60, CancellationToken ct = default)
     {
         Win32.SetCursorPos(screenX, screenY);
         await Task.Delay(35, ct); // Wait 2 game frames (~33ms at 60fps) for Slate viewport focus

@@ -42,11 +42,12 @@ public class AutoNavigator
     }
 
     public Task<bool> NavigateToEchoPickerAsync(CancellationToken ct = default)
-        => NavigateToEchoPickerAsync(null, ct);
+        => NavigateToEchoPickerAsync(null, null, ct);
 
-    public async Task<bool> NavigateToEchoPickerAsync(int? navClickHoldMs, CancellationToken ct = default)
+    public async Task<bool> NavigateToEchoPickerAsync(int? sidebarHoldMs, int? slotHoldMs = null, CancellationToken ct = default)
     {
-        int holdMs = navClickHoldMs ?? _config.NavClickHoldMs;
+        int sbHold = sidebarHoldMs ?? _config.SidebarClickHoldMs;
+        int slHold = slotHoldMs ?? _config.SlotClickHoldMs;
 
         Report(NavigationStep.FocusWindow, "Bringing Wuthering Waves to foreground...");
         if (!await WindowManager.EnsureForegroundAsync())
@@ -70,19 +71,19 @@ public class AutoNavigator
             return false;
         }
 
-        // Step 2: Click Echo tab on left sidebar
+        // Step 2: Click Echo tab on left sidebar (calibrated: 120ms)
         int sidebarX = bounds.Left + (int)(bounds.Width * _config.EchoSidebarFraction.X);
         int sidebarY = bounds.Top + (int)(bounds.Height * _config.EchoSidebarFraction.Y);
-        Report(NavigationStep.ClickEchoTab, $"Clicking Echo sidebar icon at ({sidebarX}, {sidebarY}) with hold={holdMs}ms...");
-        await _input.SendClickAsync(sidebarX, sidebarY, holdMs: holdMs, ct: ct);
+        Report(NavigationStep.ClickEchoTab, $"Clicking Echo sidebar icon at ({sidebarX}, {sidebarY}) with hold={sbHold}ms...");
+        await _input.SendClickAsync(sidebarX, sidebarY, holdMs: sbHold, ct: ct);
         await Task.Delay(1000, ct);
         if (!CheckFocus()) return false;
 
-        // Step 3: Click top equipped echo slot
+        // Step 3: Click top equipped echo slot (calibrated: 60ms)
         int slotX = bounds.Left + (int)(bounds.Width * _config.EchoSlotFraction.X);
         int slotY = bounds.Top + (int)(bounds.Height * _config.EchoSlotFraction.Y);
-        Report(NavigationStep.ClickEchoSlot, $"Clicking equipped echo slot at ({slotX}, {slotY}) with hold={holdMs}ms...");
-        await _input.SendClickAsync(slotX, slotY, holdMs: holdMs, ct: ct);
+        Report(NavigationStep.ClickEchoSlot, $"Clicking equipped echo slot at ({slotX}, {slotY}) with hold={slHold}ms...");
+        await _input.SendClickAsync(slotX, slotY, holdMs: slHold, ct: ct);
         await Task.Delay(_config.LandingDelayMs, ct);
 
         Report(NavigationStep.EchoPickerReady, "Echo picker is open and ready.");
@@ -121,8 +122,8 @@ public class AutoNavigator
                     int screenX = bounds.Left + (int)(bounds.Width * fracX);
                     int screenY = bounds.Top + (int)(bounds.Height * fracY);
 
-                    // Click card
-                    await _input.SendClickAsync(screenX, screenY, ct: ct);
+                    // Click card (calibrated 60ms)
+                    await _input.SendClickAsync(screenX, screenY, holdMs: _config.DefaultClickHoldMs, ct: ct);
                     EchoSelected?.Invoke(page, r, c, screenX, screenY);
 
                     // Humanized delay between card clicks
@@ -191,8 +192,8 @@ public class AutoNavigator
                     int screenX = bounds.Left + (int)(bounds.Width * fracX);
                     int screenY = bounds.Top + (int)(bounds.Height * fracY);
 
-                    // Click card
-                    await _input.SendClickAsync(screenX, screenY, ct: ct);
+                    // Click card (calibrated 60ms)
+                    await _input.SendClickAsync(screenX, screenY, holdMs: _config.DefaultClickHoldMs, ct: ct);
                     EchoSelected?.Invoke(page, r, c, screenX, screenY);
 
                     // Wait for stats text to render but BEFORE 3D shimmer animation finishes

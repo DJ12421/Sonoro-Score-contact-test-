@@ -125,13 +125,9 @@ internal class Program
                     var p4Str = Console.ReadLine()?.Trim();
                     int p4 = int.TryParse(p4Str, out int v4) && v4 > 0 ? v4 : 3;
 
-                    Console.Write($"Nav click hold duration in ms (sidebar & slot) [Default: {config.NavClickHoldMs} ms]: ");
-                    var navHoldStr = Console.ReadLine()?.Trim();
-                    int navHold = int.TryParse(navHoldStr, out int nh) && nh > 0 ? nh : config.NavClickHoldMs;
-
-                    Log("INFO", $"Starting full navigation sequence (nav click hold: {navHold}ms) in 2 seconds... (Alt+Tab to cancel)");
+                    Log("INFO", $"Starting full navigation (Sidebar: {config.SidebarClickHoldMs}ms, Slot: {config.SlotClickHoldMs}ms, Cards: {config.DefaultClickHoldMs}ms) in 2 seconds... (Alt+Tab to cancel)");
                     await Task.Delay(2000, cts.Token);
-                    var ok = await navigator.NavigateToEchoPickerAsync(navClickHoldMs: navHold, ct: cts.Token);
+                    var ok = await navigator.NavigateToEchoPickerAsync(cts.Token);
                     if (ok)
                     {
                         await navigator.CrawlEchoGridAsync(p4, cts.Token);
@@ -159,14 +155,6 @@ internal class Program
                     var modeStr = Console.ReadLine()?.Trim();
                     bool fromOverworld = modeStr == "1";
 
-                    int navHold6 = config.NavClickHoldMs;
-                    if (fromOverworld)
-                    {
-                        Console.Write($"Nav click hold duration in ms [Default: {config.NavClickHoldMs} ms]: ");
-                        var nh6Str = Console.ReadLine()?.Trim();
-                        if (int.TryParse(nh6Str, out int nh6) && nh6 > 0) navHold6 = nh6;
-                    }
-
                     Console.Write("Pages to capture [Default: 3]: ");
                     var p6Str = Console.ReadLine()?.Trim();
                     int p6 = int.TryParse(p6Str, out int v6) && v6 > 0 ? v6 : 3;
@@ -189,7 +177,7 @@ internal class Program
 
                     if (fromOverworld)
                     {
-                        var ready = await navigator.NavigateToEchoPickerAsync(navClickHoldMs: navHold6, ct: cts.Token);
+                        var ready = await navigator.NavigateToEchoPickerAsync(cts.Token);
                         if (!ready) break;
                     }
                     else
@@ -222,7 +210,8 @@ internal class Program
                         pages = p6,
                         scrollTicks = scrollTicks,
                         preAnimationCaptureDelayMs = captureDelay,
-                        navClickHoldMs = navHold6,
+                        sidebarClickHoldMs = config.SidebarClickHoldMs,
+                        slotClickHoldMs = config.SlotClickHoldMs,
                         totalCaptured = captured
                     }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
@@ -401,10 +390,6 @@ internal class Program
         Console.Write("Select action [1-4]: ");
         var sub = Console.ReadLine()?.Trim();
 
-        Console.Write($"Nav button click hold duration in ms [Default: {config.NavClickHoldMs} ms]: ");
-        var holdStr = Console.ReadLine()?.Trim();
-        int hold = int.TryParse(holdStr, out int h) && h > 0 ? h : config.NavClickHoldMs;
-
         Log("INFO", "Bringing game to foreground in 2 seconds...");
         if (!await WindowManager.EnsureForegroundAsync())
         {
@@ -433,14 +418,20 @@ internal class Program
                 break;
 
             case "2":
-                Log("DEBUG", $"Clicking Echo Sidebar at ({sidebarX}, {sidebarY}) [hold={hold}ms]...");
-                await input.SendClickAsync(sidebarX, sidebarY, holdMs: hold, ct: ct);
+                Console.Write($"Sidebar click hold in ms [Default: {config.SidebarClickHoldMs} ms]: ");
+                var sHoldStr = Console.ReadLine()?.Trim();
+                int sHold = int.TryParse(sHoldStr, out int sh) && sh > 0 ? sh : config.SidebarClickHoldMs;
+                Log("DEBUG", $"Clicking Echo Sidebar at ({sidebarX}, {sidebarY}) [hold={sHold}ms]...");
+                await input.SendClickAsync(sidebarX, sidebarY, holdMs: sHold, ct: ct);
                 Log("OK", "Sidebar click dispatched.");
                 break;
 
             case "3":
-                Log("DEBUG", $"Clicking Equipped Echo Slot at ({slotX}, {slotY}) [hold={hold}ms]...");
-                await input.SendClickAsync(slotX, slotY, holdMs: hold, ct: ct);
+                Console.Write($"Slot click hold in ms [Default: {config.SlotClickHoldMs} ms]: ");
+                var lHoldStr = Console.ReadLine()?.Trim();
+                int lHold = int.TryParse(lHoldStr, out int lh) && lh > 0 ? lh : config.SlotClickHoldMs;
+                Log("DEBUG", $"Clicking Equipped Echo Slot at ({slotX}, {slotY}) [hold={lHold}ms]...");
+                await input.SendClickAsync(slotX, slotY, holdMs: lHold, ct: ct);
                 Log("OK", "Slot click dispatched.");
                 break;
 
@@ -449,12 +440,12 @@ internal class Program
                 await input.SendKeyAsync("C", holdMs: config.KeyHoldMs, ct: ct);
                 await Task.Delay(1200, ct);
 
-                Log("INFO", $"Running step 2: Sidebar Icon at ({sidebarX}, {sidebarY}) (hold={hold}ms)...");
-                await input.SendClickAsync(sidebarX, sidebarY, holdMs: hold, ct: ct);
+                Log("INFO", $"Running step 2: Sidebar Icon at ({sidebarX}, {sidebarY}) (calibrated hold={config.SidebarClickHoldMs}ms)...");
+                await input.SendClickAsync(sidebarX, sidebarY, holdMs: config.SidebarClickHoldMs, ct: ct);
                 await Task.Delay(1000, ct);
 
-                Log("INFO", $"Running step 3: Equipped Slot at ({slotX}, {slotY}) (hold={hold}ms)...");
-                await input.SendClickAsync(slotX, slotY, holdMs: hold, ct: ct);
+                Log("INFO", $"Running step 3: Equipped Slot at ({slotX}, {slotY}) (calibrated hold={config.SlotClickHoldMs}ms)...");
+                await input.SendClickAsync(slotX, slotY, holdMs: config.SlotClickHoldMs, ct: ct);
                 Log("OK", "Step sequence dispatched.");
                 break;
         }
