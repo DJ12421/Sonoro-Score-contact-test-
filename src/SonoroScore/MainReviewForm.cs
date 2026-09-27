@@ -161,10 +161,12 @@ public partial class MainReviewForm : Form
         var openJsonBtn   = new ToolStripButton("📄 Load Scan JSON", null, async (s, e) => await OpenJsonDialogAsync()) { ForeColor = FgPrimary };
         var saveJsonBtn   = new ToolStripButton("💾 Save Verified JSON", null, async (s, e) => await SaveVerifiedJsonAsync()) { ForeColor = AccentGreen, Font = new Font(Font, FontStyle.Bold) };
         var rescanBtn     = new ToolStripButton("⚡ Re-Scan Current", null, async (s, e) => await RescanCurrentAsync()) { ForeColor = AccentAmber };
+        var tacetBtn      = new ToolStripButton("⬆ Tacet-Lab", null, async (s, e) => await ExportTacetLabAsync()) { ForeColor = FgPrimary, ToolTipText = "1-click export verified echoes to tacet-lab-backup.json" };
+        var goodBtn       = new ToolStripButton("⬆ GOOD", null, async (s, e) => await ExportGoodAsync()) { ForeColor = FgPrimary, ToolTipText = "1-click export verified echoes to GOOD format (best-effort bridge)" };
 
         _sessionInfoLabel = new ToolStripLabel("No session loaded") { ForeColor = FgSecondary, Alignment = ToolStripItemAlignment.Right };
 
-        toolStrip.Items.AddRange([openFolderBtn, openJsonBtn, new ToolStripSeparator(), saveJsonBtn, new ToolStripSeparator(), rescanBtn, _sessionInfoLabel]);
+        toolStrip.Items.AddRange([openFolderBtn, openJsonBtn, new ToolStripSeparator(), saveJsonBtn, new ToolStripSeparator(), rescanBtn, new ToolStripSeparator(), tacetBtn, goodBtn, _sessionInfoLabel]);
 
         // 2. Status Bar
         var statusStrip = new StatusStrip { BackColor = BgCard, ForeColor = FgSecondary };
@@ -626,6 +628,87 @@ public partial class MainReviewForm : Form
         await File.WriteAllTextAsync(outPath, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         _statusLabel.Text = $"Saved {payload.VerifiedCount} verified echoes to {Path.GetFileName(outPath)}";
         MessageBox.Show($"Verified echoes exported successfully!\n\nFile saved to:\n{outPath}", "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private List<ExportableEcho> CurrentExportModels()
+    {
+        var models = new List<ExportableEcho>();
+        foreach (var item in _allItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.MainStatKey) ||
+                item.MainStatKey.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var subs = item.Substats
+                .Where(s => s.IsActive && !string.IsNullOrWhiteSpace(s.StatKey) &&
+                            !s.StatKey.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                .Select(s => (s.StatKey, s.Value))
+                .ToList();
+            models.Add(new ExportableEcho(
+                item.EchoName, item.Cost, item.Rarity, item.Level,
+                item.Sonata ?? "", item.EquippedBy ?? "",
+                item.MainStatKey, item.MainStatValue, subs));
+        }
+        return models;
+    }
+
+    private async Task ExportTacetLabAsync()
+    {
+        if (_allItems.Count == 0)
+        {
+            MessageBox.Show("No echoes loaded.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "JSON files (*.json)|*.json",
+            FileName = $"tacet-lab-backup_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+            InitialDirectory = _currentSessionPath ?? AppDomain.CurrentDomain.BaseDirectory
+        };
+        if (sfd.ShowDialog() != DialogResult.OK) return;
+        try
+        {
+            var models = CurrentExportModels();
+            string json = TacetLabExporter.Export(models, out int skipped);
+            await File.WriteAllTextAsync(sfd.FileName, json);
+            _statusLabel.Text = $"Tacet-Lab backup: {models.Count} echoes ({skipped} skipped).";
+            MessageBox.Show($"Tacet-Lab backup exported!\n\n{models.Count} echoes → {sfd.FileName}\n" +
+                            $"({skipped} skipped without main stat)\n\nImport in Tacet-Lab via top-bar Export/Restore.",
+                            "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task ExportGoodAsync()
+    {
+        if (_allItems.Count == 0)
+        {
+            MessageBox.Show("No echoes loaded.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "JSON files (*.json)|*.json",
+            FileName = $"sonoro-good_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+            InitialDirectory = _currentSessionPath ?? AppDomain.CurrentDomain.BaseDirectory
+        };
+        if (sfd.ShowDialog() != DialogResult.OK) return;
+        try
+        {
+            var models = CurrentExportModels();
+            string json = GoodExporter.Export(models, out int skipped);
+            await File.WriteAllTextAsync(sfd.FileName, json);
+            _statusLabel.Text = $"GOOD export: {models.Count} echoes ({skipped} skipped).";
+            MessageBox.Show($"GOOD file exported (best-effort WuWa→GOOD bridge)!\n\n{models.Count} echoes → {sfd.FileName}\n" +
+                            "Prefer tacet-lab-backup.json for lossless Tacet-Lab import.",
+                            "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     // ── Item Binding & Editing ────────────────────────────────────────────────

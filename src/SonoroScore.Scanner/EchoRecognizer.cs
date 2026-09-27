@@ -56,6 +56,20 @@ public class EchoRecognizer
         var errors   = new List<string>();
         var warnings = new List<string>();
 
+        // ── 0. Signature version check (Priority 4) ─────────────────────────
+        // Warns when sonata_signatures.json is stale vs. GameDatabase.DataVersion.
+        if (!SonataSignatureMatcher.CheckVersion(_log))
+            warnings.Add($"Sonata signature version mismatch (loaded='{SonataSignatureMatcher.LoadedVersion ?? "none"}', " +
+                         $"expected='{SonataSignatureMatcher.ExpectedSignatureVersion}', db='{GameDatabase.DataVersion}').");
+
+        // ── 0b. OCR engine mode (Priority 3/4 QA gate) ──────────────────────
+        string ocrMode = TesseractOcr.IsAvailable
+            ? (ScannerConfig.UseWindowsOcrFallback ? "Tesseract+WinOcr-fallback" : "Tesseract-only")
+            : (ScannerConfig.UseWindowsOcrFallback ? "WinOcr-only (no tessdata)" : "NO-OCR-ENGINE");
+        _log?.Invoke($"  [OCR] Engine mode: {ocrMode}");
+        if (ocrMode == "NO-OCR-ENGINE")
+            warnings.Add("No OCR engine available (Tesseract missing and Windows fallback disabled).");
+
         try
         {
             // ── 2. OCR individual regions ───────────────────────────────────
@@ -78,7 +92,7 @@ public class EchoRecognizer
             // ── 4. Echo name (fuzzy catalog match) ──────────────────────────
             string cleanedName = CleanOcrText(nameOcr);
             var (nameEntry, nameScore) = FuzzyMatcher.ClosestMatch(
-                cleanedName, _catalog, e => e.Name, threshold: 0.68f);
+                cleanedName, _catalog, e => e.Name, threshold: ScannerConfig.EchoNameMinConfidence);
 
             // Try 2-line windows if score is low
             if (nameScore < 0.75f)
@@ -87,7 +101,7 @@ public class EchoRecognizer
                 for (int i = 0; i < lines.Length - 1 && nameScore < 0.90f; i++)
                 {
                     string window = lines[i] + " " + lines[i + 1];
-                    var (e2, s2) = FuzzyMatcher.ClosestMatch(window, _catalog, e => e.Name, 0.68f);
+                    var (e2, s2) = FuzzyMatcher.ClosestMatch(window, _catalog, e => e.Name, ScannerConfig.EchoNameMinConfidence);
                     if (s2 > nameScore) { nameEntry = e2; nameScore = s2; }
                 }
             }
@@ -120,7 +134,7 @@ public class EchoRecognizer
             // ── 8. Substats (Unified Block with Y-Clustering & Pixel Fallback) ──
             using var substatsBmp = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
             using var substatsUp  = ImagePreprocessor.Upscale2x(ImagePreprocessor.EnhanceForOcr(substatsBmp));
-            var ocrLines = await WinOcr.RecognizeLinesWithBoundsAsync(substatsUp);
+            var ocrLines = await OcrLinesAsync(substatsUp);
 
             double slotHeight = substatsUp.Height / 5.0;
             var slotLabels = new string?[5];
@@ -196,13 +210,22 @@ public class EchoRecognizer
             string rawSubstatsOcr = string.Join("\n", ocrLines.Select(l => $"[y={l.Y:F0}, x={l.X:F0}] {l.Text}"));
 
 
-            // ── 9. Sonata detection (Zone B OCR) ────────────────────────────
-            // OCR the sonata zone. Find the "Sonata Effect" header line.
-            // The very next non-empty line is the sonata set name (e.g. "Trailblazing Star @ (2/2)").
-            // Strip the " @ (N/N)" icon artifact → get the set name text.
+            // ── 9. Sonata detection ─────────────────────────────────────────
+            // Primary: icon pixel-signature match (Tacet-Lab visual.ts port).
+            // Fallback: Zone B OCR text parse of the "Sonata Effect" line.
             string? sonataName    = null;
             float   sonataConf    = 0f;
             string  rawSonataOcr  = sonataZoneOcr.Trim();
+
+            using (var iconCrop = EchoRegions.CropRegion(panel, EchoRegions.SonataIcon))
+            {
+                var (sigName, sigConf) = SonataSignatureMatcher.Match(iconCrop);
+                if (sigName != null && sigConf > ScannerConfig.SonataIconMinConfidence)
+                {
+                    sonataName = sigName;
+                    sonataConf = (float)sigConf;
+                }
+            }
 
             var sonataLines = sonataZoneOcr
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -212,7 +235,14 @@ public class EchoRecognizer
                 l => l.Contains("Sonata", StringComparison.OrdinalIgnoreCase) &&
                      l.Contains("Effect", StringComparison.OrdinalIgnoreCase));
 
-            if (sonataHdrIdx >= 0 && sonataHdrIdx + 1 < sonataLines.Length)
+            // Only run the OCR text path when the icon matcher did not already win.
+            if (sonataName != null)
+            {
+                // Icon signature match succeeded — keep it, skip OCR parse.
+                // Traceable in test output via warnings (Priority 3 re-run target).
+                warnings.Add($"Sonata from icon match: {sonataName} (conf {sonataConf:F2}).");
+            }
+            else if (sonataHdrIdx >= 0 && sonataHdrIdx + 1 < sonataLines.Length)
             {
                 // Take the line immediately after "Sonata Effect"
                 string rawSonataCand = sonataLines[sonataHdrIdx + 1];
@@ -224,12 +254,13 @@ public class EchoRecognizer
                 {
                     // Fuzzy match against known sonata names
                     var (matched, score) = FuzzyMatcher.ClosestMatch(
-                        cleanedSonata, GameDatabase.KnownSonatas, s => s, threshold: 0.55f);
+                        cleanedSonata, GameDatabase.KnownSonatas, s => s, threshold: ScannerConfig.SonataTextMinConfidence);
 
                     if (matched != null)
                     {
                         sonataName = matched;
                         sonataConf = score;
+                        warnings.Add($"Sonata from OCR text: {sonataName} (conf {sonataConf:F2}).");
                     }
                     else
                     {
@@ -297,6 +328,13 @@ public class EchoRecognizer
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// OCR a region. Tesseract is the primary engine; Windows.Media.Ocr is the
+    /// fallback when allowed by <see cref="ScannerConfig.UseWindowsOcrFallback"/>
+    /// (unavailable engine, exception, or empty result below
+    /// <see cref="ScannerConfig.OcrMinTextLength"/>).
+    /// Set <c>ScannerConfig.UseWindowsOcrFallback=false</c> for QA Tesseract-only runs.
+    /// </summary>
     private static async Task<string> OcrRegionAsync(Bitmap panel, System.Drawing.RectangleF region, bool upscale)
     {
         using var crop = EchoRegions.CropRegion(panel, region);
@@ -304,9 +342,72 @@ public class EchoRecognizer
         if (upscale)
         {
             using var up = ImagePreprocessor.Upscale2x(enhanced);
-            return await WinOcr.RecognizeAsync(up);
+            return await OcrTextAsync(up);
         }
-        return await WinOcr.RecognizeAsync(enhanced);
+        return await OcrTextAsync(enhanced);
+    }
+
+    private static async Task<string> OcrTextAsync(Bitmap bmp)
+    {
+        bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
+        if (TesseractOcr.IsAvailable)
+        {
+            try
+            {
+                string t = await TesseractOcr.RecognizeAsync(bmp);
+                if (!fallbackAllowed)
+                    return t;
+                if (ScannerConfig.FallbackOnEmptyTesseractResult &&
+                    (string.IsNullOrWhiteSpace(t) || t.Trim().Length < ScannerConfig.OcrMinTextLength))
+                {
+                    // Empty Tesseract hit → fall through to Windows OCR.
+                }
+                else
+                {
+                    return t;
+                }
+            }
+            catch
+            {
+                if (!fallbackAllowed)
+                    return string.Empty;
+                /* fall through to Windows OCR */
+            }
+        }
+        else if (!fallbackAllowed)
+        {
+            return string.Empty;
+        }
+        return await WinOcr.RecognizeAsync(bmp);
+    }
+
+    private static async Task<List<OcrLineInfo>> OcrLinesAsync(Bitmap bmp)
+    {
+        bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
+        if (TesseractOcr.IsAvailable)
+        {
+            try
+            {
+                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(bmp);
+                if (!fallbackAllowed)
+                    return lines;
+                bool usable = lines.Count > 0 && lines.Any(l => !string.IsNullOrWhiteSpace(l.Text));
+                if (!ScannerConfig.FallbackOnEmptyTesseractResult || usable)
+                    return lines;
+                // else fall through to Windows OCR
+            }
+            catch
+            {
+                if (!fallbackAllowed)
+                    return [];
+                /* fall through to Windows OCR */
+            }
+        }
+        else if (!fallbackAllowed)
+        {
+            return [];
+        }
+        return await WinOcr.RecognizeLinesWithBoundsAsync(bmp);
     }
 
     private static string CleanOcrText(string ocr)

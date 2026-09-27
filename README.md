@@ -148,6 +148,32 @@ Sonoro-Score/
 * Wuthering Waves running at 1080p or 1440p (16:9 Borderless Windowed or Fullscreen)
 * [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (only if compiling from source)
 
+### Tesseract OCR data setup
+The scanner uses **Tesseract** as its primary OCR engine and falls back to the
+built-in Windows OCR if Tesseract is unavailable (gated by
+`ScannerConfig.UseWindowsOcrFallback`, default `true`).
+
+1. Download `eng.traineddata` from
+   [tessdata_best](https://github.com/tesseract-ocr/tessdata_best).
+2. Place it in a `tessdata/` folder next to the executable, e.g.
+   `publish/SonoroScore/tessdata/eng.traineddata`.
+3. Native `leptonica`/`tesseract` DLLs are copied automatically by the
+   `Tesseract` NuGet package on build.
+
+Without `tessdata`, the scanner still runs using Windows OCR (unless fallback is
+disabled for QA via `--no-winocr-fallback` or `SONORO_NO_WINOCR=1`).
+
+### 1-click exports (Tacet-Lab + GOOD)
+- **Tacet-Lab (lossless, primary):** `tacet-lab-backup.json` (schemaVersion 7) —
+  import in Tacet-Lab via top-bar Export/Restore. Scanner CLI writes it with
+  `--export-tacet-auto`; the debugger auto-writes one per scan; the review studio
+  has a `⬆ Tacet-Lab` toolbar button.
+- **GOOD (best-effort bridge):** `sonoro-good.json` (GOOD v3 envelope with `wuwa*`
+  lossless fields) — WuWa→GOOD stat/slot mapping is approximate (see
+  `GoodExporter.cs`); prefer the Tacet-Lab backup for lossless import.
+- **Signatures:** `sonata_signatures.json` is versioned (`3.6`); refresh via
+  `dotnet run --project src/SonoroScore.Scanner.Cli -- --update-signatures`.
+
 ---
 
 ### Running the Apps
@@ -235,15 +261,19 @@ dotnet publish src/AlephalSonata/AlephalSonata.csproj -c Release -r win-x64 --se
 - [x] 5×3 Picker Grid crawling with Box-Muller Gaussian click jitter
 - [x] Calibrated smooth page scrolling (-34 ticks) and Alt+Tab safety guard
 - [x] Real-time diagnostic file logging (`logs/aleph_trace_*.log`)
-- [ ] Direct HSL pixel classification for Echo rarity (Gold/Purple/Blue/Green)
-- [ ] 16×16 Sonata elemental icon visual feature matching
-- [ ] Discrete substat roll-table snapping
-- [ ] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format
+- [x] Direct HSL pixel classification for Echo rarity (Gold/Purple/Blue/Green)
+- [x] 16×16 Sonata icon pixel-signature matching (Tacet-Lab port, 34 sets)
+- [x] Tesseract OCR primary engine with Windows.Media.Ocr fallback
+- [x] Discrete substat roll-table snapping
+- [x] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format (`sonoro-good.json`)
+- [ ] Calibration re-run on `publish/AlephalSonata/aleph_images` (needs .NET SDK; see `integration_todo.md` Priority 3)
 
 ---
 
 ## ✦ License & Disclaimer
 
-Distributed under the **MIT License**.
+Distributed under the **MIT License** for original code. Parts adapted from
+[Tacet-Lab](https://github.com/DJ12421/Tacet-Lab) are GPL-3.0 — see `NOTICES.md`
+before distributing builds that bundle the scanner.
 
 *Sonoro-Score is a fan-made open-source tool and is not affiliated with, endorsed by, or sponsored by Kuro Games. Wuthering Waves and all associated assets, artwork, and game titles are trademarks and copyrights of Kuro Games.*

@@ -10,6 +10,14 @@
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+  </ItemGroup>
+
+  <!-- Sonata icon signatures (extracted from Tacet-Lab) must sit next to the exe. -->
+  <ItemGroup>
+    <None Update="sonata_signatures.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

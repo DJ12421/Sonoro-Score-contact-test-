@@ -13,12 +13,17 @@ internal class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.WriteLine("=== SONORO-SCORE ECHO SCANNER & TEST SUITE RUNNER ===");
+        ScannerConfig.ApplyEnvironment();
 
         // Parse arguments
         string? targetDir = null;
         int limit = int.MaxValue;
         bool forceRefresh = false;
         string? customOut = null;
+        string? exportTacet = null;
+        string? exportGood = null;
+        bool updateSignatures = false;
+        string? signatureUrl = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -26,6 +31,13 @@ internal class Program
             else if (args[i] == "--limit" && i + 1 < args.Length && int.TryParse(args[++i], out int l)) limit = l;
             else if (args[i] == "--refresh") forceRefresh = true;
             else if (args[i] == "--out" && i + 1 < args.Length) customOut = args[++i];
+            else if (args[i] == "--export-tacet" && i + 1 < args.Length) exportTacet = args[++i];
+            else if (args[i] == "--export-tacet-auto") exportTacet = "__auto__";
+            else if (args[i] == "--export-good" && i + 1 < args.Length) exportGood = args[++i];
+            else if (args[i] == "--export-good-auto") exportGood = "__auto__";
+            else if (args[i] == "--no-winocr-fallback") ScannerConfig.UseWindowsOcrFallback = false;
+            else if (args[i] == "--update-signatures") updateSignatures = true;
+            else if (args[i] == "--signature-url" && i + 1 < args.Length) signatureUrl = args[++i];
         }
 
         // Default test suite location
@@ -56,6 +68,16 @@ internal class Program
         }
 
         Console.WriteLine($"Target directory: {targetDir}");
+        Console.WriteLine($"OCR mode: {(ScannerConfig.UseWindowsOcrFallback ? "Tesseract+WinOcr-fallback" : "Tesseract-only (QA)")}");
+
+        // 0. Sonata signature version check (+ optional refresh, Priority 4)
+        if (updateSignatures)
+        {
+            bool ok = await SonataSignatureMatcher.EnsureUpdatedAsync(
+                url: signatureUrl, forceRefresh: true, log: m => Console.WriteLine(m));
+            Console.WriteLine(ok ? "[SIG] Signatures ready." : "[SIG] Signature update failed; using local file.");
+        }
+        SonataSignatureMatcher.CheckVersion(m => Console.WriteLine(m));
 
         // 1. Load database (fetch from nanoka.cc or cache)
         EchoCatalogEntry[] catalog;
@@ -147,6 +169,12 @@ internal class Program
         Console.WriteLine($"  Fully complete echoes   : {complete}/{total} ({((float)complete / total):P1})");
         Console.WriteLine($"  Average substats / echo : {avgSubs:F2}");
 
+        // Sonata source breakdown (Priority 3 re-run target: icon match should dominate).
+        int sonataIcon = results.Count(r => r.Warnings.Any(w => w.StartsWith("Sonata from icon match")));
+        int sonataOcr = results.Count(r => r.Warnings.Any(w => w.StartsWith("Sonata from OCR text")));
+        Console.WriteLine($"  Sonata via icon match  : {sonataIcon}/{total} ({((float)sonataIcon / Math.Max(1, total)):P1})");
+        Console.WriteLine($"  Sonata via OCR fallback : {sonataOcr}/{total} ({((float)sonataOcr / Math.Max(1, total)):P1})");
+
         // 4. Save JSON results
         var sessionSummary = new ScanSessionResult
         {
@@ -169,6 +197,26 @@ internal class Program
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"\n[OK] Results successfully saved to:\n  {outPath}");
         Console.ResetColor();
+
+        // 5. 1-click exports (Priority 4 / README roadmap)
+        if (exportTacet != null)
+        {
+            string tacetPath = exportTacet == "__auto__"
+                ? Path.Combine(targetDir, $"tacet-lab-backup_{DateTime.Now:yyyyMMdd_HHmmss}.json")
+                : exportTacet;
+            string json = TacetLabExporter.ExportScans(results, out int skipped);
+            await File.WriteAllTextAsync(tacetPath, json);
+            Console.WriteLine($"[OK] Tacet-Lab backup saved to:\n  {tacetPath} ({results.Count - skipped} echoes, {skipped} skipped)");
+        }
+        if (exportGood != null)
+        {
+            string goodPath = exportGood == "__auto__"
+                ? Path.Combine(targetDir, $"sonoro-good_{DateTime.Now:yyyyMMdd_HHmmss}.json")
+                : exportGood;
+            string json = GoodExporter.ExportScans(results, out int skipped);
+            await File.WriteAllTextAsync(goodPath, json);
+            Console.WriteLine($"[OK] GOOD file saved to:\n  {goodPath} ({results.Count - skipped} echoes, {skipped} skipped)");
+        }
 
         return 0;
     }

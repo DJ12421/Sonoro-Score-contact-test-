@@ -375,6 +375,9 @@ internal class Program
         int limit = int.TryParse(limitStr, out int lv) && lv > 0 ? lv : int.MaxValue;
 
         // ── Run ─────────────────────────────────────────────────────────────
+        ScannerConfig.ApplyEnvironment();
+        SonataSignatureMatcher.CheckVersion(m => Log("WARN", m));
+        Log("INFO", $"OCR mode: {(ScannerConfig.UseWindowsOcrFallback ? "Tesseract+WinOcr-fallback" : "Tesseract-only (QA)")}");
         var imageFiles = Directory.GetFiles(sessionPath, "echo_*.png")
             .OrderBy(f => f)
             .Take(limit)
@@ -408,6 +411,9 @@ internal class Program
         float nameRate = results.Count > 0 ? (float)identified / results.Count : 0;
         float statRate = results.Count > 0 ? (float)results.Count(r => r.MainStatKey?.Value != null) / results.Count : 0;
         float subAvg   = results.Count > 0 ? (float)results.Average(r => r.Substats.Count) : 0;
+        float sonataRate = results.Count > 0 ? (float)results.Count(r => r.Sonata?.Value != null) / results.Count : 0;
+        int sonataIcon = results.Count(r => r.Warnings.Any(w => w.StartsWith("Sonata from icon match")));
+        int sonataOcr = results.Count(r => r.Warnings.Any(w => w.StartsWith("Sonata from OCR text")));
 
         var session = new ScanSessionResult
         {
@@ -435,8 +441,28 @@ internal class Program
         Log("INFO", $"  Names identified : {identified} ({nameRate:P0})");
         Log("INFO", $"  Complete echoes  : {complete} ({(results.Count > 0 ? (float)complete / results.Count : 0):P0})");
         Log("INFO", $"  Main stat rate   : {statRate:P0}");
+        Log("INFO", $"  Sonata rate      : {sonataRate:P0} (icon:{sonataIcon} ocr:{sonataOcr})");
         Log("INFO", $"  Avg substats     : {subAvg:F1}");
         Log("OK",   $"  Results saved to : {outputPath}");
+
+        // ── 1-click exports (Tacet-Lab + GOOD) ─────────────────────────────
+        try
+        {
+            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string tacetPath = Path.Combine(sessionPath, $"tacet-lab-backup_{stamp}.json");
+            string tacetJson = TacetLabExporter.ExportScans(results, out int tacetSkipped);
+            await File.WriteAllTextAsync(tacetPath, tacetJson, ct);
+            Log("OK", $"  Tacet-Lab backup : {tacetPath} ({results.Count - tacetSkipped} echoes, {tacetSkipped} skipped)");
+
+            string goodPath = Path.Combine(sessionPath, $"sonoro-good_{stamp}.json");
+            string goodJson = GoodExporter.ExportScans(results, out int goodSkipped);
+            await File.WriteAllTextAsync(goodPath, goodJson, ct);
+            Log("OK", $"  GOOD export      : {goodPath} ({results.Count - goodSkipped} echoes, {goodSkipped} skipped)");
+        }
+        catch (Exception ex)
+        {
+            Log("WARN", $"  Export failed: {ex.Message}");
+        }
 
         Console.Write("\nOpen results JSON? [Y/n]: ");
         if (Console.ReadLine()?.Trim().ToLowerInvariant() != "n")

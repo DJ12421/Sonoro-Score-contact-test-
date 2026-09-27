@@ -39,6 +39,11 @@ public static class EchoRegions
     // Rarity band (used for hue-based pixel classification)
     public static readonly RectangleF RarityBand      = new(0.003f,    0.016f,  0.320f,  0.042f);
 
+    // ── Sonata icon (visual signature match) ────────────────────────────────
+    // Icon to the right of the "Sonata Effect" heading.
+    // From Tacet-Lab regions.ts: x=0.88, y=0.008, w=0.115, h=0.065 (panel-relative).
+    public static readonly RectangleF SonataIcon      = new(0.88f,     0.008f,  0.115f,  0.065f);
+
     // ── Zone B: Echo Skill + Sonata Effect ──────────────────────────────────
     // Starts right after SubstatsBlock (y=0.44) down to y=0.94.
     // Handles both 1-line and multi-line Echo Skill descriptions across Cost 1/3/4 echoes.
