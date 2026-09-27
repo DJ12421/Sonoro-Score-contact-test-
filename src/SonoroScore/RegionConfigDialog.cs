@@ -79,8 +79,7 @@ public sealed class RegionConfigDialog : Form
         _split = new SplitContainer
         {
             Dock = DockStyle.Fill, SplitterWidth = 6,
-            BackColor = BgDark, FixedPanel = FixedPanel.Panel1,
-            Panel1MinSize = 140
+            BackColor = BgDark, FixedPanel = FixedPanel.Panel1
         };
 
         // Left: region list
@@ -108,8 +107,7 @@ public sealed class RegionConfigDialog : Form
         _content = new SplitContainer
         {
             Dock = DockStyle.Fill, SplitterWidth = 6,
-            BackColor = BgDark, FixedPanel = FixedPanel.Panel2,
-            Panel1MinSize = 200, Panel2MinSize = 230
+            BackColor = BgDark, FixedPanel = FixedPanel.Panel2
         };
 
         _view = new PictureBox
@@ -146,6 +144,10 @@ public sealed class RegionConfigDialog : Form
         // unless a saved layout from the previous session exists.
         try
         {
+            // Min sizes only valid now that containers have real sizes.
+            _split.Panel1MinSize = 140;
+            _content.Panel1MinSize = 200;
+            _content.Panel2MinSize = 230;
             if (!TryRestoreLayout())
             {
                 _split.SplitterDistance = Math.Min(180, _split.Width - _split.Panel2MinSize - _split.SplitterWidth);

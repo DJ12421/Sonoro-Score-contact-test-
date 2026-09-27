@@ -177,16 +177,15 @@ public partial class MainReviewForm : Form
         statusStrip.Items.Add(_statusLabel);
 
         // 3. Main Split: Left (List 310px) | Right Split (Center Image & Right Editor 430px)
-        // NOTE: SplitterDistance is (re)applied in OnLoad once layout exists —
-        // assigning it here while containers are still default-sized squeezes panels.
+        // NOTE: SplitterDistance AND min sizes are applied in OnLoad once layout
+        // exists — touching them here while containers are default-sized throws
+        // (SplitterDistance must be between Panel1MinSize and Width-Panel2MinSize).
         _mainSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             SplitterWidth = 6,
             BackColor = BgDark,
-            FixedPanel = FixedPanel.Panel1,
-            Panel1MinSize = 200,
-            Panel2MinSize = 500
+            FixedPanel = FixedPanel.Panel1
         };
 
         // Left Panel: Search, Filter, ListView
@@ -199,9 +198,7 @@ public partial class MainReviewForm : Form
             Dock = DockStyle.Fill,
             SplitterWidth = 6,
             BackColor = BgDark,
-            FixedPanel = FixedPanel.Panel2,
-            Panel1MinSize = 300,
-            Panel2MinSize = 320
+            FixedPanel = FixedPanel.Panel2
         };
 
         var centerPanel = CreateCenterImagePanel();
@@ -232,6 +229,12 @@ public partial class MainReviewForm : Form
                 Size = new Size(w, h);
                 PerformLayout();
             }
+
+            // Min sizes only valid now that containers have real sizes.
+            _mainSplit.Panel1MinSize = 200;
+            _mainSplit.Panel2MinSize = 500;
+            _contentSplit.Panel1MinSize = 300;
+            _contentSplit.Panel2MinSize = 320;
 
             int mainDist = saved.TryGetValue("mainSplit", out int sm) ? sm : 310;
             _mainSplit.SplitterDistance = Math.Clamp(mainDist, _mainSplit.Panel1MinSize,
