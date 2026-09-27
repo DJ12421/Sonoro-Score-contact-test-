@@ -41,8 +41,13 @@ public class AutoNavigator
         return false;
     }
 
-    public async Task<bool> NavigateToEchoPickerAsync(CancellationToken ct = default)
+    public Task<bool> NavigateToEchoPickerAsync(CancellationToken ct = default)
+        => NavigateToEchoPickerAsync(null, ct);
+
+    public async Task<bool> NavigateToEchoPickerAsync(int? navClickHoldMs, CancellationToken ct = default)
     {
+        int holdMs = navClickHoldMs ?? _config.NavClickHoldMs;
+
         Report(NavigationStep.FocusWindow, "Bringing Wuthering Waves to foreground...");
         if (!await WindowManager.EnsureForegroundAsync())
         {
@@ -54,9 +59,9 @@ public class AutoNavigator
         if (!CheckFocus()) return false;
 
         // Step 1: Open Character menu via 'C'
-        Report(NavigationStep.OpenCharacterMenu, "Sending 'C' to open Character menu...");
-        await _input.SendKeyAsync("C", ct: ct);
-        await Task.Delay(1000, ct);
+        Report(NavigationStep.OpenCharacterMenu, $"Sending 'C' to open Character menu (hold: {_config.KeyHoldMs}ms)...");
+        await _input.SendKeyAsync("C", holdMs: _config.KeyHoldMs, ct: ct);
+        await Task.Delay(1200, ct);
         if (!CheckFocus()) return false;
 
         if (!WindowManager.GetGameBounds(out var bounds))
@@ -66,18 +71,18 @@ public class AutoNavigator
         }
 
         // Step 2: Click Echo tab on left sidebar
-        Report(NavigationStep.ClickEchoTab, "Clicking Echo sidebar icon...");
         int sidebarX = bounds.Left + (int)(bounds.Width * _config.EchoSidebarFraction.X);
         int sidebarY = bounds.Top + (int)(bounds.Height * _config.EchoSidebarFraction.Y);
-        await _input.SendClickAsync(sidebarX, sidebarY, ct: ct);
-        await Task.Delay(800, ct);
+        Report(NavigationStep.ClickEchoTab, $"Clicking Echo sidebar icon at ({sidebarX}, {sidebarY}) with hold={holdMs}ms...");
+        await _input.SendClickAsync(sidebarX, sidebarY, holdMs: holdMs, ct: ct);
+        await Task.Delay(1000, ct);
         if (!CheckFocus()) return false;
 
         // Step 3: Click top equipped echo slot
-        Report(NavigationStep.ClickEchoSlot, "Clicking equipped echo slot to open picker...");
         int slotX = bounds.Left + (int)(bounds.Width * _config.EchoSlotFraction.X);
         int slotY = bounds.Top + (int)(bounds.Height * _config.EchoSlotFraction.Y);
-        await _input.SendClickAsync(slotX, slotY, ct: ct);
+        Report(NavigationStep.ClickEchoSlot, $"Clicking equipped echo slot at ({slotX}, {slotY}) with hold={holdMs}ms...");
+        await _input.SendClickAsync(slotX, slotY, holdMs: holdMs, ct: ct);
         await Task.Delay(_config.LandingDelayMs, ct);
 
         Report(NavigationStep.EchoPickerReady, "Echo picker is open and ready.");

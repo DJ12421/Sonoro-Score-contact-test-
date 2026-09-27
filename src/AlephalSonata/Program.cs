@@ -89,10 +89,11 @@ internal class Program
             Console.WriteLine("4. Run Full Auto-Navigation with Verbose Tracing");
             Console.WriteLine("5. Run Active Picker Crawl with Verbose Tracing");
             Console.WriteLine("6. Capture Raw Screen Dataset (Pre-Animation Low-Noise Test Suite)");
-            Console.WriteLine("7. Open Images Directory (aleph_images)");
-            Console.WriteLine("8. Open Logs Directory");
+            Console.WriteLine("7. Test Step-by-Step Nav Click ('C', Sidebar, Slot) with Custom Hold");
+            Console.WriteLine("8. Open Images Directory (aleph_images)");
+            Console.WriteLine("9. Open Logs Directory");
             Console.WriteLine("0. Exit");
-            Console.Write("\nSelect an action [0-8]: ");
+            Console.Write("\nSelect an action [0-9]: ");
 
             var choice = Console.ReadLine()?.Trim();
             if (choice == "0") break;
@@ -124,9 +125,13 @@ internal class Program
                     var p4Str = Console.ReadLine()?.Trim();
                     int p4 = int.TryParse(p4Str, out int v4) && v4 > 0 ? v4 : 3;
 
-                    Log("INFO", "Starting full navigation sequence in 2 seconds... (Alt+Tab to cancel)");
+                    Console.Write($"Nav click hold duration in ms (sidebar & slot) [Default: {config.NavClickHoldMs} ms]: ");
+                    var navHoldStr = Console.ReadLine()?.Trim();
+                    int navHold = int.TryParse(navHoldStr, out int nh) && nh > 0 ? nh : config.NavClickHoldMs;
+
+                    Log("INFO", $"Starting full navigation sequence (nav click hold: {navHold}ms) in 2 seconds... (Alt+Tab to cancel)");
                     await Task.Delay(2000, cts.Token);
-                    var ok = await navigator.NavigateToEchoPickerAsync(cts.Token);
+                    var ok = await navigator.NavigateToEchoPickerAsync(navClickHoldMs: navHold, ct: cts.Token);
                     if (ok)
                     {
                         await navigator.CrawlEchoGridAsync(p4, cts.Token);
@@ -154,6 +159,14 @@ internal class Program
                     var modeStr = Console.ReadLine()?.Trim();
                     bool fromOverworld = modeStr == "1";
 
+                    int navHold6 = config.NavClickHoldMs;
+                    if (fromOverworld)
+                    {
+                        Console.Write($"Nav click hold duration in ms [Default: {config.NavClickHoldMs} ms]: ");
+                        var nh6Str = Console.ReadLine()?.Trim();
+                        if (int.TryParse(nh6Str, out int nh6) && nh6 > 0) navHold6 = nh6;
+                    }
+
                     Console.Write("Pages to capture [Default: 3]: ");
                     var p6Str = Console.ReadLine()?.Trim();
                     int p6 = int.TryParse(p6Str, out int v6) && v6 > 0 ? v6 : 3;
@@ -176,7 +189,7 @@ internal class Program
 
                     if (fromOverworld)
                     {
-                        var ready = await navigator.NavigateToEchoPickerAsync(cts.Token);
+                        var ready = await navigator.NavigateToEchoPickerAsync(navClickHoldMs: navHold6, ct: cts.Token);
                         if (!ready) break;
                     }
                     else
@@ -209,6 +222,7 @@ internal class Program
                         pages = p6,
                         scrollTicks = scrollTicks,
                         preAnimationCaptureDelayMs = captureDelay,
+                        navClickHoldMs = navHold6,
                         totalCaptured = captured
                     }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
@@ -224,6 +238,10 @@ internal class Program
                     break;
 
                 case "7":
+                    await TestNavClick(input, config, cts.Token);
+                    break;
+
+                case "8":
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = imagesDir,
@@ -231,7 +249,7 @@ internal class Program
                     });
                     break;
 
-                case "8":
+                case "9":
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = logsDir,
@@ -368,5 +386,77 @@ internal class Program
 
         await input.SendScrollAsync(config.ScrollTicksPerPage, config.ScrollEventGapMs, ct);
         Log("OK", "Scroll burst completed.");
+    }
+
+    private static async Task TestNavClick(InputSimulator input, NavigationConfig config, CancellationToken ct)
+    {
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("--- TEST STEP-BY-STEP NAVIGATION CLICKS ---");
+        Console.ResetColor();
+        Console.WriteLine("1. Test Key 'C' (Open Character Menu)");
+        Console.WriteLine("2. Test Echo Sidebar Icon Click");
+        Console.WriteLine("3. Test Equipped Echo Slot Click");
+        Console.WriteLine("4. Test Full 3-Step Sequence (C -> Sidebar -> Slot)");
+        Console.Write("Select action [1-4]: ");
+        var sub = Console.ReadLine()?.Trim();
+
+        Console.Write($"Nav button click hold duration in ms [Default: {config.NavClickHoldMs} ms]: ");
+        var holdStr = Console.ReadLine()?.Trim();
+        int hold = int.TryParse(holdStr, out int h) && h > 0 ? h : config.NavClickHoldMs;
+
+        Log("INFO", "Bringing game to foreground in 2 seconds...");
+        if (!await WindowManager.EnsureForegroundAsync())
+        {
+            Log("ERROR", "Failed to focus Wuthering Waves window.");
+            return;
+        }
+
+        if (!WindowManager.GetGameBounds(out var bounds))
+        {
+            Log("ERROR", "Failed to read window bounds.");
+            return;
+        }
+
+        int sidebarX = bounds.Left + (int)(bounds.Width * config.EchoSidebarFraction.X);
+        int sidebarY = bounds.Top + (int)(bounds.Height * config.EchoSidebarFraction.Y);
+
+        int slotX = bounds.Left + (int)(bounds.Width * config.EchoSlotFraction.X);
+        int slotY = bounds.Top + (int)(bounds.Height * config.EchoSlotFraction.Y);
+
+        switch (sub)
+        {
+            case "1":
+                Log("DEBUG", $"Sending 'C' with hold={config.KeyHoldMs}ms...");
+                await input.SendKeyAsync("C", holdMs: config.KeyHoldMs, ct: ct);
+                Log("OK", "'C' keystroke dispatched.");
+                break;
+
+            case "2":
+                Log("DEBUG", $"Clicking Echo Sidebar at ({sidebarX}, {sidebarY}) [hold={hold}ms]...");
+                await input.SendClickAsync(sidebarX, sidebarY, holdMs: hold, ct: ct);
+                Log("OK", "Sidebar click dispatched.");
+                break;
+
+            case "3":
+                Log("DEBUG", $"Clicking Equipped Echo Slot at ({slotX}, {slotY}) [hold={hold}ms]...");
+                await input.SendClickAsync(slotX, slotY, holdMs: hold, ct: ct);
+                Log("OK", "Slot click dispatched.");
+                break;
+
+            case "4":
+                Log("INFO", $"Running step 1: 'C' (hold={config.KeyHoldMs}ms)...");
+                await input.SendKeyAsync("C", holdMs: config.KeyHoldMs, ct: ct);
+                await Task.Delay(1200, ct);
+
+                Log("INFO", $"Running step 2: Sidebar Icon at ({sidebarX}, {sidebarY}) (hold={hold}ms)...");
+                await input.SendClickAsync(sidebarX, sidebarY, holdMs: hold, ct: ct);
+                await Task.Delay(1000, ct);
+
+                Log("INFO", $"Running step 3: Equipped Slot at ({slotX}, {slotY}) (hold={hold}ms)...");
+                await input.SendClickAsync(slotX, slotY, holdMs: hold, ct: ct);
+                Log("OK", "Step sequence dispatched.");
+                break;
+        }
     }
 }

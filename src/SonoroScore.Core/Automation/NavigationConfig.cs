@@ -12,6 +12,10 @@ public class NavigationConfig
     // First equipped Echo slot (top circle)
     public PointF EchoSlotFraction { get; set; } = new(0.766f, 0.264f);
 
+    // Navigation click & key hold duration (longer hold for game UI buttons)
+    public int NavClickHoldMs { get; set; } = 120;
+    public int KeyHoldMs { get; set; } = 80;
+
     // 5 Rows x 3 Columns picker grid
     public int GridRows { get; set; } = 5;
     public int GridCols { get; set; } = 3;
