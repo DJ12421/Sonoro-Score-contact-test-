@@ -45,6 +45,8 @@ public sealed class RegionConfigDialog : Form
     private NumericUpDown _numL = null!, _numT = null!, _numR = null!, _numB = null!;
     private Label _pixelLabel = null!;
     private ToolStripStatusLabel _statusLabel = null!;
+    private SplitContainer _split = null!;
+    private SplitContainer _content = null!;
 
     public RegionConfigDialog(Bitmap panelSample)
     {
@@ -74,10 +76,11 @@ public sealed class RegionConfigDialog : Form
 
     private void BuildLayout()
     {
-        var split = new SplitContainer
+        _split = new SplitContainer
         {
-            Dock = DockStyle.Fill, SplitterDistance = 180, SplitterWidth = 6,
-            BackColor = BgDark, FixedPanel = FixedPanel.Panel1
+            Dock = DockStyle.Fill, SplitterWidth = 6,
+            BackColor = BgDark, FixedPanel = FixedPanel.Panel1,
+            Panel1MinSize = 140
         };
 
         // Left: region list
@@ -99,13 +102,14 @@ public sealed class RegionConfigDialog : Form
         };
         left.Controls.Add(_regionList);
         left.Controls.Add(listTitle);
-        split.Panel1.Controls.Add(left);
+        _split.Panel1.Controls.Add(left);
 
         // Right split: center view + right editor
-        var content = new SplitContainer
+        _content = new SplitContainer
         {
-            Dock = DockStyle.Fill, SplitterDistance = 560, SplitterWidth = 6,
-            BackColor = BgDark, FixedPanel = FixedPanel.Panel2
+            Dock = DockStyle.Fill, SplitterWidth = 6,
+            BackColor = BgDark, FixedPanel = FixedPanel.Panel2,
+            Panel1MinSize = 200, Panel2MinSize = 230
         };
 
         _view = new PictureBox
@@ -118,19 +122,34 @@ public sealed class RegionConfigDialog : Form
         _view.MouseDown += OnViewMouseDown;
         _view.MouseMove += OnViewMouseMove;
         _view.MouseUp += OnViewMouseUp;
-        content.Panel1.Controls.Add(_view);
+        _content.Panel1.Controls.Add(_view);
 
         var editor = new Panel { Dock = DockStyle.Fill, BackColor = BgCard, Padding = new Padding(10), AutoScroll = true };
         BuildEditor(editor);
-        content.Panel2.Controls.Add(editor);
+        _content.Panel2.Controls.Add(editor);
 
-        split.Panel2.Controls.Add(content);
-        Controls.Add(split);
+        _split.Panel2.Controls.Add(_content);
+        Controls.Add(_split);
 
         var status = new StatusStrip { BackColor = BgCard, ForeColor = FgSecondary };
         _statusLabel = new ToolStripStatusLabel("Drag a box, type the four sides, or nudge with arrows.") { Spring = true };
         status.Items.Add(_statusLabel);
         Controls.Add(status);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        // Splitter distances must be applied after layout exists: setting them
+        // while the containers still have default size freezes a squeezed panel.
+        // Left list 180px, right editor 250px, center takes the rest.
+        try
+        {
+            _split.SplitterDistance = Math.Min(180, _split.Width - _split.Panel2MinSize - _split.SplitterWidth);
+            int rightW = Math.Min(250, _content.Width - _content.Panel1MinSize - _content.SplitterWidth);
+            _content.SplitterDistance = _content.Width - rightW - _content.SplitterWidth;
+        }
+        catch { /* keep designer defaults */ }
     }
 
     private void BuildEditor(Panel editor)
