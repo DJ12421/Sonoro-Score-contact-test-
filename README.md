@@ -1,175 +1,249 @@
-# Alephal-Sonata (ℵ-Sonata)
+# Sonoro-Score 🎵
 
-> **"Infinite Echoes"** — Lightweight, high-performance C# native automation and Echo navigation engine for **Wuthering Waves**.
+> **High-performance, lightweight C# native automation and Echo scanner suite for Wuthering Waves.**
+> Free of Electron. Instant startup. Pixel-first state detection.
 
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://github.com/RadianceNoMore/Alephal-Sonata)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://github.com/RadianceNoMore/Sonoro-Score)
 [![Framework](https://img.shields.io/badge/.NET-8.0_Desktop-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![Zero Electron](https://img.shields.io/badge/Zero-Electron-green?logo=electron&logoColor=red)](https://github.com/RadianceNoMore/Alephal-Sonata)
+[![Zero Electron](https://img.shields.io/badge/Zero-Electron-green?logo=electron&logoColor=red)](https://github.com/RadianceNoMore/Sonoro-Score)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## ✦ Overview & Motivation
+## ✦ Dual Application Suite
 
-Wuthering Waves players routinely farm hundreds of Echoes every week, frequently hitting the 2,000 inventory ceiling. While powerful web optimizers like **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab)** have revolutionized damage calculations and build analysis, getting hundreds of Echoes into the optimizer has remained a major pain point: players either have to type them by hand or manually click through screen shares.
+**Sonoro-Score** is split into two specialized applications sharing a high-speed core library:
 
-Existing automated scanners often rely on **Electron**, dragging along a bundled Chromium browser, slow build cycles, and heavy RAM overhead (150MB–300MB+), frequently suffering from brittle OCR checks that abort unexpectedly during menu navigation.
+| Application | Role | Executable | Target Audience | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **`SonoroScore`** | **Production Release** | `SonoroScore.exe` | End Users & Players | Minimalist, lightning-fast automation interface for daily Echo scanning and inventory navigation. Clean console UI without log clutter. |
+| **`AlephalSonata`** | **Diagnostic Debugger** | `AlephalSonata.exe` | Developers & Power Users | Deep telemetry tool. Traces every input event, screen coordinate, window focus change, and driver status in real-time, recording persistent logs to `logs/aleph_trace_*.log`. |
 
-**`Alephal-Sonata`** is built to solve this:
-- **Native C# (.NET 8):** Fast, standalone single-file binary (~67MB) that starts in 100ms and consumes < 50MB RAM.
-- **Zero Electron:** Pure Win32 P/Invoke and direct hardware-level input.
-- **Pixel-First Navigation:** Abandons fragile text OCR for menu detection, replacing it with microsecond-fast pixel color and contrast checks.
-- **Hands-Free Inventory Crawling:** Automatically navigates in-game menus, traverses the 5×3 Echo picker grid, and smoothly advances pages with calibrated scroll bursts.
+---
+
+## ✦ Why Rebuild from Scratch?
+
+### 1. Goodbye Electron Bloat
+Legacy scanners often rely on **Electron**, packaging a complete Chromium browser and Node.js runtime just to click buttons and capture pixels. This leads to:
+* **High RAM overhead:** 150 MB – 350 MB+ memory usage while running in the background.
+* **Large distribution size:** 150 MB+ installers.
+* **Sluggish input:** Firing clicks through Node.js sub-processes or PowerShell scripts incurs 50–200ms latency per action.
+
+**Sonoro-Score (C# .NET 8):**
+* **Instant Startup:** Boots in under 100ms.
+* **Minimal Footprint:** Consumes < 45 MB RAM.
+* **Single Portable Executable:** Everything is compiled into a standalone ~67 MB `.exe` with zero external runtime dependencies.
+* **Microsecond Latency:** Win32 P/Invoke and hardware-level driver execution run in 0.001ms.
+
+---
+
+### 2. Pixel-First vs. Brittle OCR
+Legacy projects (such as early forks of *FrequencyManager*) attempted to run Tesseract OCR passes just to check if in-game menus were open (e.g. searching for the word `"Terminal"` on screen). 
+
+In practice, this approach is notoriously fragile:
+* Dynamic 3D background lighting, character particle effects, and anti-aliasing frequently distort text edges, causing OCR engines to misread `"Terminal"` as `oe 3 inal y:` and crash the scanner.
+* OCR passes take 200–500ms per frame.
+
+**The Pixel-First Solution:**  
+Borrowing principles pioneered by **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab)**, `SonoroScore` replaces menu OCR with direct pixel color sampling (HSL space) and high-contrast UI state anchors. A pixel check takes **less than 0.001ms**, is 100% deterministic, and never misreads characters.
 
 ---
 
 ## ✦ Inspirations & Acknowledgments
 
-This project stands on the shoulders of the incredible open-source community:
+This project is built with deep gratitude to the open-source community:
 
 - **[InventoryKamera](https://github.com/Andrewthe13th/Inventory_Kamera) & [WuWa Inventory Kamera](https://github.com/Psycho-Marcus/WuWa_Inventory_Kamera):**  
-  The primary inspiration for `Alephal-Sonata`'s automated inventory crawler concept. We pay tribute to their pioneering work in automating desktop screen navigation and OCR ingestion for gacha RPGs.
+  The foundational inspiration for automated gacha inventory crawling. Their pioneer work demonstrated how automated UI navigation and OCR extraction can save players thousands of hours of manual data entry.
 - **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab) (by DJ12421):**  
-  The gold standard Wuthering Waves calculation engine and optimizer. `Alephal-Sonata` adopts Tacet Lab's computer vision principles—specifically using direct pixel color/contrast analysis for UI states instead of heavy OCR—and is designed to output seamless 1-click import files (`tacet-lab-backup.json`) for Tacet Lab.
+  The premier Wuthering Waves damage calculator and Echo optimizer. We adopted Tacet Lab's computer vision philosophy (direct pixel verification over text OCR for state machines) and design our output pipelines to directly generate 1-click import files (`tacet-lab-backup.json`).
 - **[Nanoka](https://ww.nanoka.cc/):**  
-  The community-standard Wuthering Waves datamine reference.
+  The definitive datamine reference for Wuthering Waves Echo stats and substat roll distributions.
 
 ---
 
-## ✦ Meaning of the Name
+## ✦ Meaning of the Names
 
-* **Aleph ($\aleph$):** The mathematical symbol representing transfinite infinity (introduced by Georg Cantor), and an inside homage to **Denia** (*"Bubbles of Nihility"*), vessel of the Voidborne Threnodian Aleph-1.
-* **Sonata:** The acoustic Echo harmony and set-bonus mechanic in Solaris-3.
-* **Alephal-Sonata:** Literally translates to **"Infinite Echoes"** ($\aleph$ + Sonata) — engineered specifically to conquer the infinite Echo grind.
+* **Sonoro-Score:** Inspired by the *Sonoro Spheres* (acoustic spatial anomalies) and the *Tacet Field scores* in Solaris-3 — measuring the resonance score of your Echoes.
+* **Alephal-Sonata (ℵ-Sonata):**
+  * **Aleph ($\aleph$):** The transfinite mathematical symbol for infinity introduced by Georg Cantor, and an homage to **Denia** (*"Bubbles of Nihility"*), vessel of the Threnodian Aleph-1.
+  * **Sonata:** The acoustic Echo set-bonus mechanic.
+  * **Alephal-Sonata:** Literally translates to **"Infinite Echoes"** ($\aleph$ + Sonata) — the dedicated engine diagnostic system built to analyze infinite Echo collections.
 
 ---
 
 ## ✦ Technical Architecture
 
 ```text
-Wuthering Waves Window
-       │
-       ▼
-[WindowManager]  ─────────► Real-time Foreground Focus Check (Alt+Tab safety)
-       │
-       ▼
-[AutoNavigator]  ─────────► State Machine: Main -> Character ('C') -> Echo Tab -> Slot Picker
-       │
-       ▼
-[InputSimulator] ─────────► Dual Input Engine:
-                            ├── Interception Driver (Virtual HID: bypasses UE4/ACE filters)
-                            └── Win32 SendInput / mouse_event (Universal fallback)
-       │
-       ▼
-[5x3 Picker Grid Crawl] ──► Calibrated Cell Coordinates & Gaussian Click Jitter
-       │
-       ▼
-[Page Advancement] ──────► Smooth Multi-Step Scroll (-34 Ticks per page)
+               Wuthering Waves Window (16:9 / Borderless)
+                                   │
+                                   ▼
+        ┌─────────────────────────────────────────────────────┐
+        │                 SonoroScore.Core                    │
+        ├─────────────────────────────────────────────────────┤
+        │ [WindowManager]   ── Focus tracking & Alt+Tab guard │
+        │ [AutoNavigator]   ── Menu state machine & grid scan │
+        │ [InputSimulator]  ── Dual-mode click & scroll burst │
+        │                      ├── Interception Virtual HID   │
+        │                      └── Win32 SendInput (Fallback) │
+        │ [NavigationConfig]── Calibrated fractional coords   │
+        └─────────────────────────────────────────────────────┘
+                                   │
+                  ┌────────────────┴────────────────┐
+                  ▼                                 ▼
+         [SonoroScore.exe]                 [AlephalSonata.exe]
+         (Production Release)              (Diagnostic Debugger)
+          - Streamlined UI                  - Real-time event trace
+          - Fast navigation                 - Virtual HID driver check
+          - High-speed scan                 - File logging to logs/
 ```
 
-### 1. Hardware-Level Virtual HID Input
-Wuthering Waves (Unreal Engine 4 + anti-cheat) filters standard synthetic Windows events carrying the `LLMHF_INJECTED` flag. `Alephal-Sonata` integrates native bindings to the **Interception Driver** (`interception.dll`), injecting mouse clicks, movement, and wheel scrolls at the hardware driver level with 0ms latency. If the driver is not installed, it gracefully falls back to native Win32 `SendInput`.
+### 1. Anti-Cheat & Driver-Level Virtual HID
+Wuthering Waves runs on Unreal Engine 4 alongside active anti-cheat (ACE), which filters out standard synthetic Windows messages carrying the `LLMHF_INJECTED` flag.  
+`SonoroScore.Core` features direct native bindings to the **Interception Driver** (`interception.dll`), injecting mouse movements and clicks as legitimate hardware driver events. If the driver is not detected, it smoothly falls back to standard Win32 `SendInput`.
 
-### 2. Pixel-First State Detection
-Rather than running slow Tesseract OCR passes to check if menus are open (which often misreads single-line badges and aborts), `Alephal-Sonata` employs direct pixel color sampling (HSL space) and contrast edge detection. Pixel checks take **0.001ms** and never misread text.
+### 2. Humanized Gaussian Cadence
+To avoid robotic metronomic clicks:
+* Clicks incorporate Box-Muller Gaussian jitter around calibrated target centers.
+* Page scrolls are broken into clamped notch bursts (`-8` ticks) to prevent Unreal Engine's input buffer from dropping scroll events.
+* Real-time **Alt+Tab safety** halts all clicking immediately if Wuthering Waves loses foreground focus.
 
-### 3. Humanized Cadence & Anti-Stall Safety
-- Click delays are calculated using Box-Muller **Gaussian jitter** around a calibrated mean, avoiding robotic metronomic clicks while staying fast.
-- Page scrolls are broken into small, clamped notch packets (`-8` per burst) to prevent Unreal Engine's scroll wheel rate clamp from eating inputs.
-- Active **Alt+Tab detection** monitors the foreground window; if the user switches out of Wuthering Waves, the automation halts immediately.
+---
+
+## ✦ Solution & Directory Structure
+
+```
+Sonoro-Score/
+├── SonoroScore.sln                 # Master Visual Studio / .NET Solution
+├── src/
+│   ├── SonoroScore.Core/           # Shared Class Library
+│   │   ├── Native/
+│   │   │   ├── Win32.cs            # P/Invoke user32.dll & kernel32.dll declarations
+│   │   │   └── Interception.cs     # C# bindings for interception.dll (Virtual HID)
+│   │   └── Automation/
+│   │       ├── InputSimulator.cs   # Mouse, keyboard, scroll bursts & Gaussian jitter
+│   │       ├── WindowManager.cs    # Handle enumeration, aspect ratio & focus tracking
+│   │       ├── NavigationConfig.cs # Calibrated fractional coordinates & grid offsets
+│   │       └── AutoNavigator.cs    # Automated menu & 5×3 grid crawling state machine
+│   ├── SonoroScore/                # [Release App] Clean, user-facing scanner CLI
+│   │   ├── Program.cs
+│   │   └── SonoroScore.csproj
+│   └── AlephalSonata/              # [Debugger App] Diagnostic tracer & file logger
+│       ├── Program.cs
+│       └── AlephalSonata.csproj
+├── publish/                        # Standalone compiled binaries (git-ignored)
+│   ├── SonoroScore/SonoroScore.exe
+│   └── AlephalSonata/AlephalSonata.exe
+├── logs/                           # Runtime diagnostic trace logs (git-ignored)
+├── .gitignore
+└── README.md
+```
 
 ---
 
 ## ✦ Quick Start
 
 ### Prerequisites
-- Windows 10 or Windows 11 (64-bit)
-- Wuthering Waves running at 1080p or 1440p (Borderless Windowed or Fullscreen)
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (only needed if building from source)
-
-### 1. Build and Run from Source
-```powershell
-# Clone the repository
-git clone https://github.com/RadianceNoMore/Alephal-Sonata.git
-cd Alephal-Sonata
-
-# Run directly
-dotnet run --project AlephalSonata.csproj
-```
-
-### 2. Build Standalone Single-File Executable
-To produce a lightweight, single `.exe` file that runs on any PC without needing .NET installed:
-```powershell
-dotnet publish AlephalSonata.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish
-```
-The output `publish/AlephalSonata.exe` (~67MB) is completely portable.
+* Windows 10 or Windows 11 (64-bit)
+* Wuthering Waves running at 1080p or 1440p (16:9 Borderless Windowed or Fullscreen)
+* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (only if compiling from source)
 
 ---
 
-## ✦ Controls & Usage
+### Running the Apps
 
-When you run `AlephalSonata.exe`, an interactive menu appears:
+#### Option A: Run Release App (`SonoroScore`)
+```powershell
+# Run directly from source
+dotnet run --project src/SonoroScore/SonoroScore.csproj
 
+# Or run the pre-built standalone binary
+./publish/SonoroScore/SonoroScore.exe
+```
+
+#### Option B: Run Diagnostic Debugger (`AlephalSonata`)
+```powershell
+# Run directly from source
+dotnet run --project src/AlephalSonata/AlephalSonata.csproj
+
+# Or run the pre-built standalone binary
+./publish/AlephalSonata/AlephalSonata.exe
+```
+*When running `AlephalSonata`, trace logs are automatically saved to `logs/aleph_trace_<timestamp>.log`.*
+
+---
+
+### Building Standalone Single-File Executables
+
+To build standalone, single-file `.exe` binaries that run on any Windows machine without requiring .NET:
+
+```powershell
+# Publish SonoroScore (Release App)
+dotnet publish src/SonoroScore/SonoroScore.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish/SonoroScore
+
+# Publish AlephalSonata (Diagnostic Debugger)
+dotnet publish src/AlephalSonata/AlephalSonata.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish/AlephalSonata
+```
+
+---
+
+## ✦ Controls & Operation
+
+### 1. SonoroScore (Release)
+```text
+    ╔═══════════════════════════════════════════════════════╗
+    ║       SONOROSCORE — Wuthering Waves Navigator         ║
+    ║   Lightweight C# Native Automation & Scanner          ║
+    ╚═══════════════════════════════════════════════════════╝
+
+--- SonoroScore Menu ---
+1. Start Full Auto-Navigation & Scan
+2. Crawl Active Echo Picker (Fast Mode)
+3. Verify Game Window Status
+0. Exit
+```
+
+### 2. AlephalSonata (Debugger)
 ```text
     ╔═══════════════════════════════════════════════════════╗
     ║       ALEPHAL-SONATA (ℵ-Sonata)                       ║
-    ║   Infinite Echo Automation & Navigation Engine        ║
-    ║   Dedicated Windows C# Native Scanner                 ║
+    ║   Diagnostic Debugger & Process Telemetry Engine      ║
     ╚═══════════════════════════════════════════════════════╝
 
 [DRIVER STATUS] Interception Virtual HID Driver: ACTIVE
 
-=== ALEPHAL-SONATA CONTROLS ===
-1. Detect Wuthering Waves Window
-2. Full Auto-Navigation (Main Screen -> Character -> Echo Picker -> Crawl)
-3. Crawl Picker Grid Only (Use if already inside Echo Picker)
-4. Test Page Scroll Calibration (-34 ticks)
-5. Test Single Card Click (First Echo)
+=== ALEPHAL-SONATA DIAGNOSTIC MENU ===
+1. Verify Wuthering Waves Window (Handle, Rect, 16:9 check)
+2. Run Full Auto-Navigation with Verbose Tracing
+3. Run Grid Crawl Diagnostic (5x3 Picker Grid)
+4. Test Page Scroll Burst Calibration (-34 ticks)
+5. Test Single Card Click (First Echo at row 0, col 0)
+6. Flush Diagnostic Log Buffer
 0. Exit
 ```
 
-- **Option 1 (Detect Window):** Verifies game handle, dimensions, resolution, and aspect ratio.
-- **Option 2 (Full Auto-Navigation):** Automatically focuses the game, opens the Character screen (`C`), clicks the Echo tab, opens the top slot picker, and crawls all cards.
-- **Option 3 (Crawl Grid Only):** If you are already sitting in the Echo picker, choose this option to immediately crawl and scroll without menu navigation.
-- **Emergency Stop:** Press `Ctrl+C` in the console or simply **Alt+Tab** out of Wuthering Waves to stop clicking instantly.
-
----
-
-## ✦ Project Structure
-
-```
-Alephal-Sonata/
-├── src/
-│   ├── Native/
-│   │   ├── Win32.cs              # Win32 user32/kernel32 P/Invoke declarations
-│   │   └── Interception.cs       # Direct C# bindings to interception.dll
-│   ├── Automation/
-│   │   ├── InputSimulator.cs     # Mouse/keyboard simulation, wheel bursts & Gaussian jitter
-│   │   ├── WindowManager.cs      # Window handle enumeration, focus & bounding rects
-│   │   ├── NavigationConfig.cs   # Calibrated fractional coordinates, offsets & timings
-│   │   └── AutoNavigator.cs      # The core navigation & grid crawling state machine
-│   └── Program.cs                # Interactive CLI dashboard and controls
-├── AlephalSonata.csproj          # .NET 8 Windows configuration
-├── .gitignore                    # Build artifacts ignore
-└── README.md
-```
+- **Emergency Halt:** Press `Ctrl+C` in the console or simply **Alt+Tab** out of Wuthering Waves at any moment to cancel automation immediately.
 
 ---
 
 ## ✦ Roadmap
 
-- [x] Native C# Win32 & Interception Virtual HID input engine
-- [x] In-game menu navigation state machine (Main screen $\rightarrow$ Character $\rightarrow$ Echo Tab $\rightarrow$ Slot)
-- [x] 5×3 Picker Grid crawler with humanized Gaussian delays
-- [x] Calibrated page scrolling (-34 ticks) and Alt+Tab safety stop
-- [ ] Computer Vision pixel classifiers (HSL Rarity detection, 16×16 Sonata elemental icon vector matching)
-- [ ] Substat OCR parsing with discrete roll-table snapping
-- [ ] Direct export to **Tacet Lab JSON** (`tacet-lab-backup.json`) and **GOOD** format
+- [x] Shared native C# class library (`SonoroScore.Core`)
+- [x] Dual-executable architecture (`SonoroScore` release + `AlephalSonata` debugger)
+- [x] Hardware-level Virtual HID driver support (`interception.dll`) with Win32 fallback
+- [x] Menu navigation state machine: Main $\rightarrow$ Character (`C`) $\rightarrow$ Echo Tab $\rightarrow$ Slot Picker
+- [x] 5×3 Picker Grid crawling with Box-Muller Gaussian click jitter
+- [x] Calibrated smooth page scrolling (-34 ticks) and Alt+Tab safety guard
+- [x] Real-time diagnostic file logging (`logs/aleph_trace_*.log`)
+- [ ] Direct HSL pixel classification for Echo rarity (Gold/Purple/Blue/Green)
+- [ ] 16×16 Sonata elemental icon visual feature matching
+- [ ] Discrete substat roll-table snapping
+- [ ] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format
 
 ---
 
 ## ✦ License & Disclaimer
 
-This project is licensed under the **MIT License**.
+Distributed under the **MIT License**.
 
-*Alephal-Sonata is a fan-made, open-source tool and is not affiliated with, endorsed by, or associated with Kuro Games. Wuthering Waves and all related assets, names, and game content are trademarks and copyrights of Kuro Games.*
+*Sonoro-Score is a fan-made open-source tool and is not affiliated with, endorsed by, or sponsored by Kuro Games. Wuthering Waves and all associated assets, artwork, and game titles are trademarks and copyrights of Kuro Games.*

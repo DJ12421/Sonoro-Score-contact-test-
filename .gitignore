@@ -1,6 +1,8 @@
 ## .NET build artifacts
 bin/
 obj/
+publish/
+logs/
 *.user
 *.suo
 *.userosscache
@@ -14,3 +16,4 @@ _ReSharper*/
 ## OS Files
 .DS_Store
 Thumbs.db
+

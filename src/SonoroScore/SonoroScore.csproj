@@ -5,7 +5,12 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>SonoroScore</RootNamespace>
+    <AssemblyName>SonoroScore</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SonoroScore.Core\SonoroScore.Core.csproj" />
+  </ItemGroup>
 
 </Project>
