@@ -266,7 +266,9 @@ dotnet publish src/AlephalSonata/AlephalSonata.csproj -c Release -r win-x64 --se
 - [x] Tesseract OCR primary engine with Windows.Media.Ocr fallback
 - [x] Discrete substat roll-table snapping
 - [x] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format (`sonoro-good.json`)
-- [ ] Calibration re-run on `publish/AlephalSonata/aleph_images` (needs .NET SDK; see `integration_todo.md` Priority 3)
+- [x] Calibration re-run on `publish/AlephalSonata/aleph_images` (300-image corpus, 2026-09-28):
+  names 92.0% · main 91.0% · 2nd main 83.3% · sonata 100% (icon match) ·
+  complete 25.0% · 2.29 substats/echo — see `TODO.md` for the A/B table
 
 ---
 

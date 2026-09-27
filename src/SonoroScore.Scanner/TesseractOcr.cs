@@ -33,8 +33,21 @@ public static class TesseractOcr
         }
     }
 
+    /// <summary>Closed text vocabulary (Tacet ocr-pool textWhitelist).</summary>
+    public const string TextWhitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,:;!?'-–—&()/+%";
+
+    /// <summary>Digit vocabulary for number strips (Tacet ocr-pool numberWhitelist).</summary>
+    public const string NumberWhitelist = "0123456789+-.,:%";
+
     private static readonly Lazy<TesseractEngine> _engine = new(() =>
-        new TesseractEngine(TessDataPath, Language, EngineMode.Default));
+    {
+        // LSTM-only, mirroring Tacet's tesseract.js worker (OEM 1).
+        var engine = new TesseractEngine(TessDataPath, Language, EngineMode.LstmOnly);
+        engine.SetVariable("preserve_interword_spaces", "1");
+        engine.SetVariable("user_defined_dpi", "300");
+        engine.SetVariable("tessedit_do_invert", "0"); // input is already dark ink on light paper
+        return engine;
+    });
 
     private static TesseractEngine Engine => _engine.Value;
 
@@ -55,10 +68,12 @@ public static class TesseractOcr
     /// <c>SingleLine</c> for one-line strips (level, cost, stat lines),
     /// <c>SingleBlock</c> for uniform text blocks, <c>Auto</c> for mixed zones.
     /// </summary>
-    public static async Task<string> RecognizeAsync(Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
+    public static async Task<string> RecognizeAsync(
+        Bitmap bmp, PageSegMode mode = PageSegMode.Auto, string? whitelist = null)
     {
         return await Task.Run(() =>
         {
+            if (whitelist != null) Engine.SetVariable("tessedit_char_whitelist", whitelist);
             using var pix = ToPix(bmp);
             using var page = Engine.Process(pix, (PageSegMode?)mode);
             return page.GetText();
@@ -70,10 +85,11 @@ public static class TesseractOcr
     /// The returned <see cref="OcrLineInfo"/> matches the type defined in WinOcr.cs.
     /// </summary>
     public static async Task<List<OcrLineInfo>> RecognizeLinesWithBoundsAsync(
-        Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
+        Bitmap bmp, PageSegMode mode = PageSegMode.Auto, string? whitelist = null)
     {
         return await Task.Run(() =>
         {
+            if (whitelist != null) Engine.SetVariable("tessedit_char_whitelist", whitelist);
             var result = new List<OcrLineInfo>();
             using var pix = ToPix(bmp);
             using var page = Engine.Process(pix, (PageSegMode?)mode);

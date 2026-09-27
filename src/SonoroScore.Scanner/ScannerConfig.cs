@@ -60,6 +60,14 @@ public static class ScannerConfig
     /// <summary>Icon pixel-signature win threshold (EchoRecognizer step 9). Default 0.70.</summary>
     public static double SonataIconMinConfidence { get; set; } = 0.70;
 
+    /// <summary>
+    /// Tesseract PSM knobs (mirrors Tacet ocr-pool per-kind modes; A/B-testable).
+    /// Name defaults to SingleBlock (their name-kind mode); substats block too.
+    /// </summary>
+    public static Tesseract.PageSegMode NameRegionPsm { get; set; } = Tesseract.PageSegMode.SingleBlock;
+
+    public static Tesseract.PageSegMode SubstatBlockPsm { get; set; } = Tesseract.PageSegMode.SingleBlock;
+
     /// <summary>Echo-name fuzzy catalog match floor (FuzzyMatcher.ClosestMatch). Default 0.68.</summary>
     public static float EchoNameMinConfidence { get; set; } = 0.68f;
 

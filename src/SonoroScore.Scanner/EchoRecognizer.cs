@@ -74,21 +74,33 @@ public class EchoRecognizer
         try
         {
             // ── 2. OCR individual regions ───────────────────────────────────
-            // PSM per region shape: single-line strips → SingleLine, uniform
-            // multi-line blocks → SingleBlock, mixed/free zones → Auto.
+            // Strategy/PSM/whitelist per region shape (Tacet ocr-pool mapping):
+            // name→Name/SINGLE_BLOCK, level→number/SINGLE_LINE, strips→Label/
+            // SINGLE_LINE, zones→Text, substats→Substat/SINGLE_BLOCK.
             string nameOcr = await OcrNameAsync(panel);
-            string levelOcr      = await OcrRegionAsync(panel, EchoRegions.Level,          upscale: true, mode: PageSegMode.SingleLine);
-            string costOcr       = await OcrRegionAsync(panel, EchoRegions.Cost,           upscale: true, mode: PageSegMode.SingleLine);
-            string mainStatLine  = await OcrRegionAsync(panel, EchoRegions.MainStatStrip,  upscale: true, mode: PageSegMode.SingleLine);
-            string secondMainStatLine = await OcrRegionAsync(panel, EchoRegions.SecondMainStat, upscale: true, mode: PageSegMode.SingleLine);
+            string levelOcr = await OcrRegionAsync(panel, EchoRegions.Level, FieldStrategy.Text,
+                PageSegMode.SingleLine, TesseractOcr.NumberWhitelist,
+                s => ParseLevel(s) != null);
+            string costOcr = await OcrRegionAsync(panel, EchoRegions.Cost, FieldStrategy.Text,
+                PageSegMode.SingleLine, TesseractOcr.TextWhitelist,
+                s => ParseCost(s) != null);
+            string mainStatLine = await OcrRegionAsync(panel, EchoRegions.MainStatStrip, FieldStrategy.Text,
+                PageSegMode.SingleLine, TesseractOcr.TextWhitelist,
+                s => StatParser.ParseLine(StatParser.NormalizeOcrArtifacts(s)) != null);
+            string secondMainStatLine = await OcrRegionAsync(panel, EchoRegions.SecondMainStat, FieldStrategy.Text,
+                PageSegMode.SingleLine, TesseractOcr.TextWhitelist,
+                s => StatParser.ParseLine(StatParser.NormalizeOcrArtifacts(s)) != null);
             // Zone B: Sonata Effect region (starts below skill text)
-            string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone,     upscale: true, mode: PageSegMode.Auto);
+            string sonataZoneOcr = await OcrRegionAsync(panel, EchoRegions.SonataZone, FieldStrategy.Text,
+                PageSegMode.SingleBlock, TesseractOcr.TextWhitelist);
             // Zone C: Owner strip
-            string ownerZoneOcr  = await OcrRegionAsync(panel, EchoRegions.OwnerZone,      upscale: true, mode: PageSegMode.SingleLine);
+            string ownerZoneOcr = await OcrRegionAsync(panel, EchoRegions.OwnerZone, FieldStrategy.Text,
+                PageSegMode.SingleLine, TesseractOcr.TextWhitelist);
 
             _log?.Invoke($"    Name OCR: \"{nameOcr.Replace('\n',' ')}\"");
 
             // ── 3. Rarity (pixel, no OCR) ───────────────────────────────────
+            // Raw color crop: the hue classifier needs color, never binarized text.
             int rarity;
             using (var rarityBmp = EchoRegions.CropRegion(panel, EchoRegions.RarityBand))
                 rarity = RarityClassifier.Classify(rarityBmp);
@@ -116,7 +128,8 @@ public class EchoRecognizer
             {
                 try
                 {
-                    string nameOcrAuto = await OcrRegionAsync(panel, EchoRegions.EchoName, upscale: true, mode: PageSegMode.Auto);
+                    string nameOcrAuto = await OcrRegionAsync(panel, EchoRegions.EchoName,
+                        FieldStrategy.Name, PageSegMode.Auto, TesseractOcr.TextWhitelist);
                     string cleanedAuto = CleanOcrText(nameOcrAuto);
                     if (!string.IsNullOrWhiteSpace(cleanedAuto))
                     {
@@ -180,12 +193,13 @@ public class EchoRecognizer
                     warnings.Add($"Second main stat not parsed from: \"{secondMainStatLine.Replace('\n', ' ')}\"");
             }
 
-            // ── 8. Substats (Unified Block with Y-Clustering & Pixel Fallback) ──
+            // ── 8. Substats (Y-clustered slots + pixel fallback) ────────────
+            // substatsBmp is a RAW color crop: StatPixelMatcher needs color,
+            // never the binarized text path.
             using var substatsBmp = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
-            using var substatsUp  = ImagePreprocessor.Upscale2x(ImagePreprocessor.EnhanceForOcr(substatsBmp));
-            var ocrLines = await OcrLinesAsync(substatsUp);
+            var (ocrLines, slotRefH) = await OcrLinesAsync(panel);
 
-            double slotHeight = substatsUp.Height / 5.0;
+            double slotHeight = slotRefH / 5.0;
             var slotLabels = new string?[5];
             var slotValues = new float?[5];
             var slotPercents = new bool[5];
@@ -288,6 +302,7 @@ public class EchoRecognizer
 
             using (var iconCrop = EchoRegions.CropRegion(panel, EchoRegions.SonataIcon))
             {
+                // Raw color crop: the signature matcher needs color, never binarized text.
                 var (sigName, sigConf) = SonataSignatureMatcher.Match(iconCrop);
                 if (sigName != null && sigConf > ScannerConfig.SonataIconMinConfidence)
                 {
@@ -401,12 +416,64 @@ public class EchoRecognizer
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// OCR a region. Tesseract is the primary engine; Windows.Media.Ocr is the
-    /// fallback when allowed by <see cref="ScannerConfig.UseWindowsOcrFallback"/>
-    /// (unavailable engine, exception, or empty result below
-    /// <see cref="ScannerConfig.OcrMinTextLength"/>).
+    /// OCR a region. Tesseract primary runs on field-preprocessed black-on-white
+    /// input (<see cref="EchoFieldPreprocessor"/>); Windows OCR fallback runs on the
+    /// legacy enhance+upscale path whose numbers are preserved as measured.
     /// Set <c>ScannerConfig.UseWindowsOcrFallback=false</c> for QA Tesseract-only runs.
     /// </summary>
+    private static async Task<string> OcrRegionAsync(
+        Bitmap panel, RectangleF region, FieldStrategy strategy,
+        PageSegMode mode, string? whitelist, Func<string, bool>? accept = null)
+    {
+        bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
+        if (TesseractOcr.IsAvailable)
+        {
+            string t = "";
+            bool attempted = false;
+            try
+            {
+                using var tessBmp = EchoFieldPreprocessor.Process(panel, region, strategy);
+                t = await TesseractOcr.RecognizeAsync(tessBmp, mode, whitelist);
+                attempted = true;
+                if (!fallbackAllowed)
+                    return t;
+                bool empty = ScannerConfig.FallbackOnEmptyTesseractResult &&
+                    (string.IsNullOrWhiteSpace(t) || t.Trim().Length < ScannerConfig.OcrMinTextLength);
+                if (!empty && (accept == null || accept(t)))
+                    return t;
+                // Empty or grammar-rejected → fall through to Windows OCR.
+            }
+            catch
+            {
+                if (!fallbackAllowed)
+                    return attempted ? t : string.Empty;
+                /* fall through to Windows OCR */
+            }
+            if (fallbackAllowed)
+            {
+                string w = await WinOcrRegionAsync(panel, region);
+                // Prefer whichever attempt satisfies the grammar; Tesseract wins ties.
+                if (accept == null) return w;
+                if (accept(w)) return w;
+                if (accept(t)) return t;
+                return w;
+            }
+            return t;
+        }
+        else if (!fallbackAllowed)
+        {
+            return string.Empty;
+        }
+        return await WinOcrRegionAsync(panel, region);
+    }
+
+    /// <summary>Legacy Windows-OCR path (EnhanceForOcr + Upscale2x).</summary>
+    private static async Task<string> WinOcrRegionAsync(Bitmap panel, RectangleF region)
+    {
+        using var bmp = PreprocessForOcr(panel, region);
+        return await WinOcr.RecognizeAsync(bmp);
+    }
+
     /// <summary>
     /// Name-strip OCR with per-engine routing (<see cref="ScannerConfig.NameEngine"/>).
     /// Windows-only is the measured default for the stylized name font.
@@ -416,13 +483,13 @@ public class EchoRecognizer
         switch (ScannerConfig.NameEngine)
         {
             case ScannerConfig.OcrEnginePreference.WindowsOnly:
-                using (var bmp = PreprocessForOcr(panel, EchoRegions.EchoName))
-                    return await WinOcr.RecognizeAsync(bmp);
+                return await WinOcrRegionAsync(panel, EchoRegions.EchoName);
             case ScannerConfig.OcrEnginePreference.TesseractOnly:
-                using (var bmp2 = PreprocessForOcr(panel, EchoRegions.EchoName))
-                    return await TesseractOcr.RecognizeAsync(bmp2, PageSegMode.SingleLine);
+                using (var tessBmp = EchoFieldPreprocessor.Process(panel, EchoRegions.EchoName, FieldStrategy.Name))
+                    return await TesseractOcr.RecognizeAsync(tessBmp, ScannerConfig.NameRegionPsm, TesseractOcr.TextWhitelist);
             default:
-                return await OcrRegionAsync(panel, EchoRegions.EchoName, upscale: true, mode: PageSegMode.SingleLine);
+                return await OcrRegionAsync(panel, EchoRegions.EchoName,
+                    FieldStrategy.Name, ScannerConfig.NameRegionPsm, TesseractOcr.TextWhitelist);
         }
     }
 
@@ -433,65 +500,19 @@ public class EchoRecognizer
         return ImagePreprocessor.Upscale2x(enhanced);
     }
 
-    private static async Task<string> OcrRegionAsync(
-        Bitmap panel, System.Drawing.RectangleF region, bool upscale,
-        PageSegMode mode = PageSegMode.Auto)
-    {
-        using var crop = EchoRegions.CropRegion(panel, region);
-        using var enhanced = ImagePreprocessor.EnhanceForOcr(crop);
-        if (upscale)
-        {
-            using var up = ImagePreprocessor.Upscale2x(enhanced);
-            return await OcrTextAsync(up, mode);
-        }
-        return await OcrTextAsync(enhanced, mode);
-    }
-
-    private static async Task<string> OcrTextAsync(Bitmap bmp, PageSegMode mode = PageSegMode.Auto)
+    private static async Task<(List<OcrLineInfo> Lines, double RefHeight)> OcrLinesAsync(Bitmap panel)
     {
         bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
         if (TesseractOcr.IsAvailable)
         {
             try
             {
-                string t = await TesseractOcr.RecognizeAsync(bmp, mode);
+                // Substats as one uniform multi-line block on the new text path.
+                using var tessBmp = EchoFieldPreprocessor.Process(panel, EchoRegions.SubstatsBlock, FieldStrategy.Substat);
+                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(
+                    tessBmp, ScannerConfig.SubstatBlockPsm, TesseractOcr.TextWhitelist);
                 if (!fallbackAllowed)
-                    return t;
-                if (ScannerConfig.FallbackOnEmptyTesseractResult &&
-                    (string.IsNullOrWhiteSpace(t) || t.Trim().Length < ScannerConfig.OcrMinTextLength))
-                {
-                    // Empty Tesseract hit → fall through to Windows OCR.
-                }
-                else
-                {
-                    return t;
-                }
-            }
-            catch
-            {
-                if (!fallbackAllowed)
-                    return string.Empty;
-                /* fall through to Windows OCR */
-            }
-        }
-        else if (!fallbackAllowed)
-        {
-            return string.Empty;
-        }
-        return await WinOcr.RecognizeAsync(bmp);
-    }
-
-    private static async Task<List<OcrLineInfo>> OcrLinesAsync(Bitmap bmp)
-    {
-        bool fallbackAllowed = ScannerConfig.UseWindowsOcrFallback;
-        if (TesseractOcr.IsAvailable)
-        {
-            try
-            {
-                // Substats arrive here as one uniform multi-line block.
-                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(bmp, PageSegMode.SingleBlock);
-                if (!fallbackAllowed)
-                    return lines;
+                    return (lines, tessBmp.Height);
                 // Quality gate: every substat row carries digits. A digit-free
                 // result means Tesseract's segmentation failed on this crop —
                 // fall through to Windows OCR instead of serving junk lines.
@@ -499,21 +520,26 @@ public class EchoRecognizer
                     && lines.Any(l => !string.IsNullOrWhiteSpace(l.Text))
                     && lines.Any(l => l.Text.Any(char.IsDigit));
                 if (!ScannerConfig.FallbackOnEmptyTesseractResult || usable)
-                    return lines;
+                    return (lines, tessBmp.Height);
                 // else fall through to Windows OCR
             }
             catch
             {
                 if (!fallbackAllowed)
-                    return [];
+                    return ([], 1);
                 /* fall through to Windows OCR */
             }
         }
         else if (!fallbackAllowed)
         {
-            return [];
+            return ([], 1);
         }
-        return await WinOcr.RecognizeLinesWithBoundsAsync(bmp);
+        using var crop = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
+        using var enhanced = ImagePreprocessor.EnhanceForOcr(crop);
+        using var up = ImagePreprocessor.Upscale2x(enhanced);
+        double h = up.Height;
+        var wlines = await WinOcr.RecognizeLinesWithBoundsAsync(up);
+        return (wlines, h);
     }
 
     private static string CleanOcrText(string ocr)

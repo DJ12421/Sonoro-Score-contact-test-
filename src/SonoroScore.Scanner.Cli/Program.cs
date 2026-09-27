@@ -242,6 +242,8 @@ internal class Program
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         Console.WriteLine($"bitness={(Environment.Is64BitProcess ? "x64" : "x86")}");
         Console.WriteLine($"baseDir={baseDir}");
+        Console.WriteLine($"psm: name={ScannerConfig.NameRegionPsm} substats={ScannerConfig.SubstatBlockPsm} strips=SingleLine zones:sonata=SingleBlock,owner=SingleLine");
+        Console.WriteLine($"preprocessing: tesseract=EchoFieldPreprocessor(gray,p2-98norm,polarity,Otsu,x3,black-on-white) winocr=legacy Enhance+Upscale2x");
         Console.WriteLine($"TESSDATA_PREFIX={Environment.GetEnvironmentVariable("TESSDATA_PREFIX") ?? "(unset)"}");
 
         string[] candidates =
@@ -289,15 +291,19 @@ internal class Program
         using var full = new System.Drawing.Bitmap(imagePath);
         using var panel = EchoRegions.ExtractPanel(full);
         Console.WriteLine($"panel={panel.Width}x{panel.Height} block={EchoRegions.SubstatsBlock}");
+        // WinOcr legacy path input:
         using var crop = EchoRegions.CropRegion(panel, EchoRegions.SubstatsBlock);
         using var up = ImagePreprocessor.Upscale2x(ImagePreprocessor.EnhanceForOcr(crop));
-        Console.WriteLine($"upscaled={up.Width}x{up.Height} tesseractAvailable={TesseractOcr.IsAvailable}");
+        Console.WriteLine($"legacy-upscaled={up.Width}x{up.Height} tesseractAvailable={TesseractOcr.IsAvailable}");
 
         if (TesseractOcr.IsAvailable)
         {
-            foreach (var mode in new[] { Tesseract.PageSegMode.Auto, Tesseract.PageSegMode.SingleBlock })
+            // New field-preprocessed path (what the pipeline actually feeds Tesseract):
+            using var tessBmp = EchoFieldPreprocessor.Process(panel, EchoRegions.SubstatsBlock, FieldStrategy.Substat);
+            Console.WriteLine($"tess-preprocessed={tessBmp.Width}x{tessBmp.Height} psm={ScannerConfig.SubstatBlockPsm}");
+            foreach (var mode in new[] { ScannerConfig.SubstatBlockPsm, Tesseract.PageSegMode.Auto })
             {
-                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(up, mode);
+                var lines = await TesseractOcr.RecognizeLinesWithBoundsAsync(tessBmp, mode, TesseractOcr.TextWhitelist);
                 Console.WriteLine($"-- Tesseract {mode}: {lines.Count} lines");
                 foreach (var l in lines)
                     Console.WriteLine($"   [y={l.Y:F0} x={l.X:F0} w={l.Width:F0} h={l.Height:F0}] \"{l.Text}\"");
