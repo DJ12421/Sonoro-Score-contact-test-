@@ -1,275 +1,176 @@
 # Sonoro-Score 🎵
 
-> **High-performance, lightweight C# native automation and Echo scanner suite for Wuthering Waves.**
-> Free of Electron. Instant startup. Pixel-first state detection.
+> **C# (.NET 8) automation and Echo scanner suite for Wuthering Waves.**
+> Pixel-driven navigation, hybrid-OCR echo recognition, review studio, and
+> one-click exports for Tacet-Lab.
 
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://github.com/RadianceNoMore/Sonoro-Score)
 [![Framework](https://img.shields.io/badge/.NET-8.0_Desktop-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![Zero Electron](https://img.shields.io/badge/Zero-Electron-green?logo=electron&logoColor=red)](https://github.com/RadianceNoMore/Sonoro-Score)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## ✦ Dual Application Suite
+## ✦ What It Is
 
-**Sonoro-Score** is split into two specialized applications sharing a high-speed core library:
+Two Windows applications plus a shared scanner library:
 
-| Application | Role | Executable | Target Audience | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **`SonoroScore`** | **Production Release** | `SonoroScore.exe` | End Users & Players | Minimalist, lightning-fast automation interface for daily Echo scanning and inventory navigation. Clean console UI without log clutter. |
-| **`AlephalSonata`** | **Diagnostic Debugger** | `AlephalSonata.exe` | Developers & Power Users | Deep telemetry tool. Traces every input event, screen coordinate, window focus change, and driver status in real-time, recording persistent logs to `logs/aleph_trace_*.log`. |
-
----
-
-## ✦ Why Rebuild from Scratch?
-
-### 1. Goodbye Electron Bloat
-Legacy scanners often rely on **Electron**, packaging a complete Chromium browser and Node.js runtime just to click buttons and capture pixels. This leads to:
-* **High RAM overhead:** 150 MB – 350 MB+ memory usage while running in the background.
-* **Large distribution size:** 150 MB+ installers.
-* **Sluggish input:** Firing clicks through Node.js sub-processes or PowerShell scripts incurs 50–200ms latency per action.
-
-**Sonoro-Score (C# .NET 8):**
-* **Instant Startup:** Boots in under 100ms.
-* **Minimal Footprint:** Consumes < 45 MB RAM.
-* **Single Portable Executable:** Everything is compiled into a standalone ~67 MB `.exe` with zero external runtime dependencies.
-* **Microsecond Latency:** Win32 P/Invoke and hardware-level driver execution run in 0.001ms.
+| Application | Executable | Role |
+| :--- | :--- | :--- |
+| **`SonoroScore` (SS)** | `SonoroScore.exe` | **Echo Review & Verification Studio** (WinForms GUI). Load captures + scan results side by side, correct fields, re-scan single echoes, export verified inventories. |
+| **`AlephalSonata`** | `AlephalSonata.exe` | **Diagnostic debugger & capture tool** (console). Window inspection, auto-navigation with verbose tracing, raw screen-dataset capture, one-click OCR test-suite runs with file logging to `logs/aleph_trace_*.log`. |
+| `SonoroScore.Scanner` | *(library)* | **Recognition pipeline.** Panel extraction, hybrid OCR, icon-signature matching, roll-table snapping, Tacet-Lab/GOOD exporters. |
+| `SonoroScore.Scanner.Cli` | *(dev tool)* | **Batch test runner.** Runs the pipeline over an image folder, prints detection rates, writes scan + export JSONs. |
+| `SonoroScore.Core` | *(library)* | **Automation primitives.** Window focus tracking, Interception virtual-HID input with Win32 `SendInput` fallback, Gaussian click jitter, scroll bursts, Alt+Tab safety guard. |
 
 ---
 
-### 2. Pixel-First vs. Brittle OCR
-Legacy projects (such as early forks of *FrequencyManager*) attempted to run Tesseract OCR passes just to check if in-game menus were open (e.g. searching for the word `"Terminal"` on screen). 
+## ✦ Scanner Pipeline
 
-In practice, this approach is notoriously fragile:
-* Dynamic 3D background lighting, character particle effects, and anti-aliasing frequently distort text edges, causing OCR engines to misread `"Terminal"` as `oe 3 inal y:` and crash the scanner.
-* OCR passes take 200–500ms per frame.
+Per echo screenshot (1080p echo-detail panel):
 
-**The Pixel-First Solution:**  
-Borrowing principles pioneered by **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab)**, `SonoroScore` replaces menu OCR with direct pixel color sampling (HSL space) and high-contrast UI state anchors. A pixel check takes **less than 0.001ms**, is 100% deterministic, and never misreads characters.
+1. **Panel extraction** — crops the right-side detail strip (`EchoRegions`, panel-relative rects tunable in-app, see below).
+2. **Hybrid OCR** — Tesseract 5 (LSTM-only, DPI 300, per-region page-segmentation modes, closed stat/name vocabularies) as primary; Windows OCR as gated fallback. Names route to Windows OCR (measured best on the stylized font); stat strips/blocks run Tesseract.
+3. **Field preprocessing** — per-region pipeline ported from Tacet-Lab: ×3 enlarge, grayscale, 4/96 percentile normalization, polarity correction, Otsu threshold to black-on-white, plus name/substat cleanup filters.
+4. **Sonata icons** — 16×16 pixel-signature matching over 34 sets (no OCR involved).
+5. **Rarity** — direct HSL pixel classification, no OCR.
+6. **Parsing** — fuzzy catalog match (live Nanoka data + local cache), stat-label parsing with OCR-artifact recovery, substat values snapped to legal tunable rolls, Y-position row slotting.
 
----
+### Measured accuracy (300-image 1080p corpus, 2026-09-28)
 
-## ✦ Inspirations & Acknowledgments
+| Field | Rate |
+|---|---|
+| Echo name | 99.7% |
+| Main stat | 99.0% |
+| Second main stat | 98.7% |
+| Sonata set (icon match) | 100% |
+| Fully complete echoes | 35.3% |
+| Avg substats / echo | 2.54 |
 
-This project is built with deep gratitude to the open-source community:
-
-- **[InventoryKamera](https://github.com/Andrewthe13th/Inventory_Kamera) & [WuWa Inventory Kamera](https://github.com/Psycho-Marcus/WuWa_Inventory_Kamera):**  
-  The foundational inspiration for automated gacha inventory crawling. Their pioneer work demonstrated how automated UI navigation and OCR extraction can save players thousands of hours of manual data entry.
-- **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab) (by DJ12421):**  
-  The premier Wuthering Waves damage calculator and Echo optimizer. We adopted Tacet Lab's computer vision philosophy (direct pixel verification over text OCR for state machines) and design our output pipelines to directly generate 1-click import files (`tacet-lab-backup.json`).
-- **[Nanoka](https://ww.nanoka.cc/):**  
-  The definitive datamine reference for Wuthering Waves Echo stats and substat roll distributions.
-
----
-
-## ✦ Meaning of the Names
-
-* **Sonoro-Score:** Inspired by the *Sonoro Spheres* (acoustic spatial anomalies) and the *Tacet Field scores* in Solaris-3 — measuring the resonance score of your Echoes.
-* **Alephal-Sonata (ℵ-Sonata):**
-  * **Aleph ($\aleph$):** The transfinite mathematical symbol for infinity introduced by Georg Cantor, and an homage to **Denia** (*"Bubbles of Nihility"*), vessel of the Threnodian Aleph-1.
-  * **Sonata:** The acoustic Echo set-bonus mechanic.
-  * **Alephal-Sonata:** Literally translates to **"Infinite Echoes"** ($\aleph$ + Sonata) — the dedicated engine diagnostic system built to analyze infinite Echo collections.
+`dotnet test` runs the same checks against a 25-fixture 1080p regression corpus plus unit tests — green. Details and A/B history: `TODO.md`.
 
 ---
 
-## ✦ Technical Architecture
+## ✦ Review Studio (SS)
 
-```text
-               Wuthering Waves Window (16:9 / Borderless)
-                                   │
-                                   ▼
-        ┌─────────────────────────────────────────────────────┐
-        │                 SonoroScore.Core                    │
-        ├─────────────────────────────────────────────────────┤
-        │ [WindowManager]   ── Focus tracking & Alt+Tab guard │
-        │ [AutoNavigator]   ── Menu state machine & grid scan │
-        │ [InputSimulator]  ── Dual-mode click & scroll burst │
-        │                      ├── Interception Virtual HID   │
-        │                      └── Win32 SendInput (Fallback) │
-        │ [NavigationConfig]── Calibrated fractional coords   │
-        └─────────────────────────────────────────────────────┘
-                                   │
-                  ┌────────────────┴────────────────┐
-                  ▼                                 ▼
-         [SonoroScore.exe]                 [AlephalSonata.exe]
-         (Production Release)              (Diagnostic Debugger)
-          - Streamlined UI                  - Real-time event trace
-          - Fast navigation                 - Virtual HID driver check
-          - High-speed scan                 - File logging to logs/
-```
+- **📁 Open Folder** — loads echo images together with the folder's latest scan JSON (no more pending stubs).
+- **📄 Load Scan JSON** — loads results and relinks screenshots by file name if paths went stale (asks for the folder when needed).
+- **Editor** — identity, main + second main stat, five tuned substat rows with roll validation, raw OCR evidence per field, search/filter, keyboard flow (`A`/`D` navigate, `Space` verify, `Ctrl+S` save).
+- **⚡ Re-Scan Current** — re-runs the pipeline on one echo with live catalog.
+- **⬆ Tacet-Lab / ⬆ GOOD** — one-click exports of the reviewed inventory.
+- **◈ Areas** — visual scan-area config: all 12 regions as draggable dashed boxes over the current echo panel, Left/Top/Right/Bottom numeric entry (panel-relative 0–1), arrow-key nudging at 1 px/press. Saves to `regions.override.json` next to the exe; delete it (or Reset) to restore compiled defaults.
 
-### 1. Anti-Cheat & Driver-Level Virtual HID
-Wuthering Waves runs on Unreal Engine 4 alongside active anti-cheat (ACE), which filters out standard synthetic Windows messages carrying the `LLMHF_INJECTED` flag.  
-`SonoroScore.Core` features direct native bindings to the **Interception Driver** (`interception.dll`), injecting mouse movements and clicks as legitimate hardware driver events. If the driver is not detected, it smoothly falls back to standard Win32 `SendInput`.
-
-### 2. Humanized Gaussian Cadence
-To avoid robotic metronomic clicks:
-* Clicks incorporate Box-Muller Gaussian jitter around calibrated target centers.
-* Page scrolls are broken into clamped notch bursts (`-8` ticks) to prevent Unreal Engine's input buffer from dropping scroll events.
-* Real-time **Alt+Tab safety** halts all clicking immediately if Wuthering Waves loses foreground focus.
+Window and dialog layouts (sizes + splitter positions) are remembered across sessions.
 
 ---
 
-## ✦ Solution & Directory Structure
+## ✦ 1-Click Exports
 
-```
-Sonoro-Score/
-├── SonoroScore.sln                 # Master Visual Studio / .NET Solution
-├── src/
-│   ├── SonoroScore.Core/           # Shared Class Library
-│   │   ├── Native/
-│   │   │   ├── Win32.cs            # P/Invoke user32.dll & kernel32.dll declarations
-│   │   │   └── Interception.cs     # C# bindings for interception.dll (Virtual HID)
-│   │   └── Automation/
-│   │       ├── InputSimulator.cs   # Mouse, keyboard, scroll bursts & Gaussian jitter
-│   │       ├── WindowManager.cs    # Handle enumeration, aspect ratio & focus tracking
-│   │       ├── NavigationConfig.cs # Calibrated fractional coordinates & grid offsets
-│   │       └── AutoNavigator.cs    # Automated menu & 5×3 grid crawling state machine
-│   ├── SonoroScore/                # [Release App] Clean, user-facing scanner CLI
-│   │   ├── Program.cs
-│   │   └── SonoroScore.csproj
-│   └── AlephalSonata/              # [Debugger App] Diagnostic tracer & file logger
-│       ├── Program.cs
-│       └── AlephalSonata.csproj
-├── publish/                        # Standalone compiled binaries (git-ignored)
-│   ├── SonoroScore/SonoroScore.exe
-│   └── AlephalSonata/AlephalSonata.exe
-├── logs/                           # Runtime diagnostic trace logs (git-ignored)
-├── .gitignore
-└── README.md
-```
+- **Tacet-Lab (lossless, primary):** `tacet-lab-backup.json` (schema v7) — restore in Tacet-Lab via top-bar Export/Restore.
+- **GOOD (best-effort bridge):** `sonoro-good.json` (GOOD v3 envelope with `wuwa*` lossless fields). WuWa→GOOD stat/slot mapping is approximate — prefer the Tacet-Lab backup. Both exporters carry the primary main stat only (single-main schemas); the second main stat lives in SS verified JSON.
 
 ---
 
 ## ✦ Quick Start
 
 ### Prerequisites
-* Windows 10 or Windows 11 (64-bit)
-* Wuthering Waves running at 1080p or 1440p (16:9 Borderless Windowed or Fullscreen)
-* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (only if compiling from source)
+* Windows 10/11 (64-bit)
+* Wuthering Waves at **1080p** (16:9 Borderless or Fullscreen) — scanning is calibrated for 1080p
+* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (only to compile from source)
 
 ### Tesseract OCR data setup
-The scanner uses **Tesseract** as its primary OCR engine and falls back to the
-built-in Windows OCR if Tesseract is unavailable (gated by
-`ScannerConfig.UseWindowsOcrFallback`, default `true`).
+1. Download `eng.traineddata` ([tessdata_best](https://github.com/tesseract-ocr/tessdata_best) or `_fast`).
+2. Place it in a `tessdata/` folder next to the executable, e.g. `publish/SonoroScore/tessdata/eng.traineddata`.
+3. Native `leptonica`/`tesseract` DLLs ship via the `Tesseract` NuGet package on build.
 
-1. Download `eng.traineddata` from
-   [tessdata_best](https://github.com/tesseract-ocr/tessdata_best).
-2. Place it in a `tessdata/` folder next to the executable, e.g.
-   `publish/SonoroScore/tessdata/eng.traineddata`.
-3. Native `leptonica`/`tesseract` DLLs are copied automatically by the
-   `Tesseract` NuGet package on build.
-
-Without `tessdata`, the scanner still runs using Windows OCR (unless fallback is
-disabled for QA via `--no-winocr-fallback` or `SONORO_NO_WINOCR=1`).
-
-### 1-click exports (Tacet-Lab + GOOD)
-- **Tacet-Lab (lossless, primary):** `tacet-lab-backup.json` (schemaVersion 7) —
-  import in Tacet-Lab via top-bar Export/Restore. Scanner CLI writes it with
-  `--export-tacet-auto`; the debugger auto-writes one per scan; the review studio
-  has a `⬆ Tacet-Lab` toolbar button.
-- **GOOD (best-effort bridge):** `sonoro-good.json` (GOOD v3 envelope with `wuwa*`
-  lossless fields) — WuWa→GOOD stat/slot mapping is approximate (see
-  `GoodExporter.cs`); prefer the Tacet-Lab backup for lossless import.
-- **Signatures:** `sonata_signatures.json` is versioned (`3.6`); refresh via
-  `dotnet run --project src/SonoroScore.Scanner.Cli -- --update-signatures`.
-
----
+Without `tessdata`, everything still runs on Windows OCR (unless disabled via `--no-winocr-fallback` / `SONORO_NO_WINOCR=1`).
 
 ### Running the Apps
-
-#### Option A: Run Release App (`SonoroScore`)
 ```powershell
-# Run directly from source
+# Review studio
 dotnet run --project src/SonoroScore/SonoroScore.csproj
-
-# Or run the pre-built standalone binary
 ./publish/SonoroScore/SonoroScore.exe
-```
 
-#### Option B: Run Diagnostic Debugger (`AlephalSonata`)
-```powershell
-# Run directly from source
+# Debugger / capture tool (logs to logs/aleph_trace_<timestamp>.log)
 dotnet run --project src/AlephalSonata/AlephalSonata.csproj
-
-# Or run the pre-built standalone binary
 ./publish/AlephalSonata/AlephalSonata.exe
-```
-*When running `AlephalSonata`, trace logs are automatically saved to `logs/aleph_trace_<timestamp>.log`.*
 
----
+# Batch scanner: full corpus + exports
+dotnet run --project src/SonoroScore.Scanner.Cli/SonoroScore.Scanner.Cli.csproj -c Release -- `
+  --dir publish/AlephalSonata/aleph_images/session_20260927_204453 `
+  --export-tacet-auto --export-good-auto
+
+# Regression suite (25 fixtures + unit tests)
+dotnet test src/SonoroScore.Scanner.Tests/SonoroScore.Scanner.Tests.csproj -c Release
+```
 
 ### Building Standalone Single-File Executables
-
-To build standalone, single-file `.exe` binaries that run on any Windows machine without requiring .NET:
-
 ```powershell
-# Publish SonoroScore (Release App)
 dotnet publish src/SonoroScore/SonoroScore.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish/SonoroScore
-
-# Publish AlephalSonata (Diagnostic Debugger)
 dotnet publish src/AlephalSonata/AlephalSonata.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish/AlephalSonata
 ```
+Produces ~170 MB self-contained `.exe` files (Tesseract natives + WinForms runtime included).
 
 ---
 
 ## ✦ Controls & Operation
 
-### 1. SonoroScore (Release)
+### AlephalSonata menu
 ```text
-    ╔═══════════════════════════════════════════════════════╗
-    ║       SONOROSCORE — Wuthering Waves Navigator         ║
-    ║   Lightweight C# Native Automation & Scanner          ║
-    ╚═══════════════════════════════════════════════════════╝
-
---- SonoroScore Menu ---
-1. Start Full Auto-Navigation & Scan
-2. Crawl Active Echo Picker (Fast Mode)
-3. Verify Game Window Status
+1. Inspect Game Window Rect & Handle
+2. Test Single Click at Cell (0,0)
+3. Test Page Scroll Calibration
+4. Run Full Auto-Navigation with Verbose Tracing
+5. Run Active Picker Crawl with Verbose Tracing
+6. Capture Raw Screen Dataset (aleph_images/session_<timestamp>)
+7. Test Step-by-Step Nav ('C', Sidebar, Slot) & Timings
+8. Open Images Directory
+9. Open Logs Directory
+A. Run OCR Echo Scanner on aleph_images test suite -> JSON (+ Tacet/GOOD exports)
 0. Exit
 ```
 
-### 2. AlephalSonata (Debugger)
+### SonoroScore toolbar
 ```text
-    ╔═══════════════════════════════════════════════════════╗
-    ║       ALEPHAL-SONATA (ℵ-Sonata)                       ║
-    ║   Diagnostic Debugger & Process Telemetry Engine      ║
-    ╚═══════════════════════════════════════════════════════╝
-
-[DRIVER STATUS] Interception Virtual HID Driver: ACTIVE
-
-=== ALEPHAL-SONATA DIAGNOSTIC MENU ===
-1. Verify Wuthering Waves Window (Handle, Rect, 16:9 check)
-2. Run Full Auto-Navigation with Verbose Tracing
-3. Run Grid Crawl Diagnostic (5x3 Picker Grid)
-4. Test Page Scroll Burst Calibration (-34 ticks)
-5. Test Single Card Click (First Echo at row 0, col 0)
-6. Flush Diagnostic Log Buffer
-0. Exit
+📁 Open Folder | 📄 Load Scan JSON | 💾 Save Verified JSON | ⚡ Re-Scan Current
+⬆ Tacet-Lab | ⬆ GOOD | ◈ Areas
 ```
 
-- **Emergency Halt:** Press `Ctrl+C` in the console or simply **Alt+Tab** out of Wuthering Waves at any moment to cancel automation immediately.
+- **Emergency halt:** `Ctrl+C` in console, or **Alt+Tab** out of the game — automation stops immediately on focus loss.
+- **Per-scan QA flags (CLI):** `--limit N`, `--refresh`, `--out <path>`, `--no-winocr-fallback`,
+  `--name-engine auto|tesseract|windows`, `--update-signatures`, `--diag-tess`, `--dump-lines <img>`.
 
 ---
 
-## ✦ Roadmap
+## ✦ Solution Layout
 
-- [x] Shared native C# class library (`SonoroScore.Core`)
-- [x] Dual-executable architecture (`SonoroScore` release + `AlephalSonata` debugger)
-- [x] Hardware-level Virtual HID driver support (`interception.dll`) with Win32 fallback
-- [x] Menu navigation state machine: Main $\rightarrow$ Character (`C`) $\rightarrow$ Echo Tab $\rightarrow$ Slot Picker
-- [x] 5×3 Picker Grid crawling with Box-Muller Gaussian click jitter
-- [x] Calibrated smooth page scrolling (-34 ticks) and Alt+Tab safety guard
-- [x] Real-time diagnostic file logging (`logs/aleph_trace_*.log`)
-- [x] Direct HSL pixel classification for Echo rarity (Gold/Purple/Blue/Green)
-- [x] 16×16 Sonata icon pixel-signature matching (Tacet-Lab port, 34 sets)
-- [x] Tesseract OCR primary engine with Windows.Media.Ocr fallback
-- [x] Discrete substat roll-table snapping
-- [x] 1-Click JSON export for **Tacet Lab** (`tacet-lab-backup.json`) and **GOOD** format (`sonoro-good.json`)
-- [x] Calibration re-run on `publish/AlephalSonata/aleph_images` (300-image corpus, 2026-09-28):
-  names 99.7% · main 99.0% · 2nd main 98.7% · sonata 100% (icon match) ·
-  complete 35.3% · 2.54 substats/echo — see `TODO.md` for the A/B table.
-  `dotnet test` (25-fixture 1080p corpus + unit tests) green.
+```
+Sonoro-Score/
+├── SonoroScore.sln
+├── Directory.Build.props          # shared version (v1.6.0)
+├── NOTICES.md                     # third-party licenses (Tacet-Lab: GPL-3.0)
+├── TODO.md                        # accuracy plan + A/B history
+├── src/
+│   ├── SonoroScore.Core/          # window, Interception HID / SendInput, jitter, navigator
+│   ├── SonoroScore.Scanner/       # EchoRecognizer, EchoRegions (+regions.override.json),
+│   │                              # TesseractOcr/WinOcr, EchoFieldPreprocessor (+legacy),
+│   │                              # SonataSignatureMatcher, GameDatabase, FuzzyMatcher,
+│   │                              # StatParser/PixelMatcher, TunableRolls, RarityClassifier,
+│   │                              # exporters, EchoAccuracy, sonata_signatures.json
+│   ├── SonoroScore.Scanner.Cli/   # batch runner + --diag-tess/--dump-lines/--dump-panel
+│   ├── SonoroScore.Scanner.Tests/ # xUnit: scoring/invariant unit tests + 25-fixture
+│   │                              # 1080p corpus (fixtures/echoes/english-1080p/)
+│   ├── SonoroScore/               # review studio (MainReviewForm, RegionConfigDialog)
+│   └── AlephalSonata/             # debugger + capture tool
+├── publish/                       # built exes (git-ignored)
+└── logs/                          # trace logs (git-ignored)
+```
+
+---
+
+## ✦ Inspirations & Acknowledgments
+
+- **[Tacet Lab](https://github.com/DJ12421/Tacet-Lab) (by DJ12421):** Wuthering Waves optimizer whose scanner architecture this project ports — region layout, OCR pipeline shape, preprocessing strategy, icon-signature matching, backup format. Adapted portions are GPL-3.0; see `NOTICES.md`.
+- **[Nanoka](https://ww.nanoka.cc/):** datamine source for the live echo catalog (names, costs, sonata sets) and roll tables.
 
 ---
 
